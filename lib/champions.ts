@@ -2,49 +2,57 @@
 // ===============================================================
 // Lecture des fichiers data/champions/*.json côté serveur (Node),
 // mapping des champs utiles POUR L’AFFICHAGE.
-// Intègre Data Dragon via les helpers d'images (CDN vs local).
+//
+// Intégration Data Dragon (CDN) SANS CASSER l’existant :
+//  - On conserve imagePath (chemin local dans /public) pour compatibilité.
+//  - On ajoute imageUrl = URL finale (CDN si USE_DDRAGON=1, sinon local).
+//  - On résout la version Data Dragon UNE seule fois pour toute la liste.
+//
+// À utiliser dans tes pages/server components :
+//   const champions = await getChampionsFromDisk();
+//   ... et consommer champion.imageUrl (ou imagePath en fallback).
 // ===============================================================
 
 import fs from "node:fs/promises";
 import path from "node:path";
 import { USE_DDRAGON, resolveDDragonVersion } from "./ddragon";
-import { getChampionPortraitUrl } from "@/lib/championAssets";
+import { getChampionPortraitUrl } from "./championAssets";
 
-// ---- Types d'objets retournés à l'UI --------------------------------
+// ---- Types exposés à l’UI --------------------------------------------
 
 export type ChampionMeta = {
-  id: string;          // "Aatrox"
-  key: string;         // "266"
-  slug: string;        // "aatrox"
-  name: string;        // "Aatrox"
-  title: string;       // "Épée des Darkin"
-  roles: string[];     // ["Fighter"]...
-  partype?: string;    // "Puits de sang"
+  id: string;           // "Aatrox"
+  key: string;          // "266"
+  slug: string;         // "aatrox"
+  name: string;         // "Aatrox"
+  title: string;        // "Épée des Darkin"
+  roles: string[];      // ["Fighter"]...
+  partype?: string;     // "Puits de sang"
   blurb?: string;
   lore?: string;
 
-  // Chemin local comme AVANT (compatibilité) -> ex: "/assets/champions/Aatrox.png"
+  // Chemin local (legacy) -> ex: "/assets/champions/Aatrox.png"
   imagePath: string;
 
-  // URL finale à utiliser dans l’UI (CDN OU local selon le flag)
+  // URL finale pour <Image /> : CDN si flag ON + version ok, sinon local
   imageUrl: string;
 
-  // Info (debug/analytics) : version Data Dragon utilisée
+  // Info complémentaire (debug/analytics)
   ddragonVersion?: string;
 };
 
-// ---- Constantes de dossiers -----------------------------------------
+// ---- Constantes de chemins -------------------------------------------
 
 const DATA_DIR = path.join(process.cwd(), "data", "champions");
-const PUBLIC_PREFIX = "/assets/champions";
+const PUBLIC_PREFIX = "/assets/champions"; // correspond à /public/assets/champions
 
-// ---- Fonction principale --------------------------------------------
+// ---- Fonction principale ---------------------------------------------
 
 /**
  * Lit tous les JSON de data/champions et construit la liste de métadonnées.
- * - Conserve imagePath (local) = rétro‑compatibilité.
- * - Calcule imageUrl via getChampionPortraitUrl(version, imageFull, imagePath).
- * - Résout la version Data Dragon une seule fois (si USE_DDRAGON=1).
+ * - imagePath: chemin local conservé (rétro‑compat).
+ * - imageUrl : URL finale (CDN/local) via helper.
+ * - Résout la version Data Dragon une seule fois si USE_DDRAGON=1.
  */
 export async function getChampionsFromDisk(): Promise<ChampionMeta[]> {
   // 1) Lister les fichiers .json
@@ -56,14 +64,14 @@ export async function getChampionsFromDisk(): Promise<ChampionMeta[]> {
     return [];
   }
 
-  // 2) Si le CDN est activé, on résout la version DDragon maintenant (optim perf)
+  // 2) Si on a activé le CDN, on résout la version maintenant (optim perf)
   let version = "";
   if (USE_DDRAGON) {
     try {
       version = await resolveDDragonVersion();
     } catch (e) {
-      // En cas d’échec réseau (rare), on laisse version="" et on retombera sur le local
-      console.warn("[champions] Impossible de résoudre la version Data Dragon -> fallback local", e);
+      // Si la résolution échoue (réseau indispo), on log et on repasse en local
+      console.warn("[champions] Échec résolution version Data Dragon -> fallback local", e);
       version = "";
     }
   }
@@ -96,13 +104,14 @@ export async function getChampionsFromDisk(): Promise<ChampionMeta[]> {
       // Image : comme avant, on suppose public/assets/champions/<ID>.png
       const imageFile: string = root.image?.full ?? `${id}.png`;
 
-      // Chemin local (rétro‑compatibilité totale)
+      // Chemin local (legacy) — utile en rollback et en fallback
       const imagePath = `${PUBLIC_PREFIX}/${imageFile}`; // ex: /assets/champions/Aatrox.png
 
       // URL finale : CDN si activé ET version résolue, sinon local
-      const imageUrl = version
-        ? getChampionPortraitUrl(version, imageFile, imagePath)
-        : imagePath;
+      const imageUrl =
+        version && imageFile
+          ? getChampionPortraitUrl(version, imageFile, imagePath)
+          : imagePath;
 
       champions.push({
         id,
@@ -114,8 +123,8 @@ export async function getChampionsFromDisk(): Promise<ChampionMeta[]> {
         partype,
         blurb,
         lore,
-        imagePath,     // garde l’ancien champ (legacy)
-        imageUrl,      // **à utiliser** dans l’UI
+        imagePath,                     // champ conservé (compatibilité)
+        imageUrl,                      // champ à utiliser dans l’UI
         ddragonVersion: version || undefined,
       });
     } catch (e) {
@@ -123,7 +132,7 @@ export async function getChampionsFromDisk(): Promise<ChampionMeta[]> {
     }
   }
 
-  // 4) Tri alpha par nom (comme tu le faisais)
+  // 4) Tri alpha par nom (français, insensible à la casse/accents)
   champions.sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
 
   return champions;

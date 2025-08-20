@@ -165,7 +165,7 @@ type Props = {
   targetTotal: number;
 };
 
-export default function ChampionsGame({ initialChampions }: Props) {
+export default function ChampionsGame({ initialChampions, targetTotal }: Props) {
   // Cartes trouvées (par slug)
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
 
@@ -301,6 +301,7 @@ export default function ChampionsGame({ initialChampions }: Props) {
         <div /> {/* spacer */}
         <div style={{ marginLeft: "auto", display: "flex", gap: ".5rem", alignItems: "center" }}>
           <div className="badge">Trouvés : {found}/{totalPlayable}</div>
+          <div className="badge">🎯 Objectif : {targetTotal}</div>
           <div className="badge">⏱ {mm}:{ss}</div>
           <button type="button" onClick={togglePause} title={paused ? "Reprendre" : "Mettre en pause"}>
             {paused ? "Reprendre" : "Pause"}
@@ -346,10 +347,14 @@ export default function ChampionsGame({ initialChampions }: Props) {
         </div>
       </div>
 
-      {/* Grille des cartes */}
-      <div className="cards-grid">
+      {/* Grille des cartes : image + nom + caractéristiques visibles UNIQUEMENT si trouvé */}
+      <div className="cards-grid grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
         {initialChampions.map((c) => (
-          <ChampionCard key={c.slug} champ={c} isRevealed={revealed.has(c.slug)} />
+          <ChampionCard
+            key={c.slug}
+            champion={c}
+            isRevealed={revealed.has(c.slug)}
+          />
         ))}
       </div>
 
