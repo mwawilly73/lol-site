@@ -1,9 +1,16 @@
 // lib/champions.ts
+// ===============================================================
 // Lecture des fichiers data/champions/*.json côté serveur (Node),
-// mapping des champs utiles pour l’affichage.
+// mapping des champs utiles POUR L’AFFICHAGE.
+// Intègre Data Dragon via les helpers d'images (CDN vs local).
+// ===============================================================
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { USE_DDRAGON, resolveDDragonVersion } from "./ddragon";
+import { getChampionPortraitUrl } from "@/lib/championAssets";
+
+// ---- Types d'objets retournés à l'UI --------------------------------
 
 export type ChampionMeta = {
   id: string;          // "Aatrox"
@@ -15,13 +22,32 @@ export type ChampionMeta = {
   partype?: string;    // "Puits de sang"
   blurb?: string;
   lore?: string;
-  imagePath: string;   // "/assets/champions/Aatrox.png"
+
+  // Chemin local comme AVANT (compatibilité) -> ex: "/assets/champions/Aatrox.png"
+  imagePath: string;
+
+  // URL finale à utiliser dans l’UI (CDN OU local selon le flag)
+  imageUrl: string;
+
+  // Info (debug/analytics) : version Data Dragon utilisée
+  ddragonVersion?: string;
 };
+
+// ---- Constantes de dossiers -----------------------------------------
 
 const DATA_DIR = path.join(process.cwd(), "data", "champions");
 const PUBLIC_PREFIX = "/assets/champions";
 
+// ---- Fonction principale --------------------------------------------
+
+/**
+ * Lit tous les JSON de data/champions et construit la liste de métadonnées.
+ * - Conserve imagePath (local) = rétro‑compatibilité.
+ * - Calcule imageUrl via getChampionPortraitUrl(version, imageFull, imagePath).
+ * - Résout la version Data Dragon une seule fois (si USE_DDRAGON=1).
+ */
 export async function getChampionsFromDisk(): Promise<ChampionMeta[]> {
+  // 1) Lister les fichiers .json
   let files: string[] = [];
   try {
     files = await fs.readdir(DATA_DIR);
@@ -30,17 +56,32 @@ export async function getChampionsFromDisk(): Promise<ChampionMeta[]> {
     return [];
   }
 
+  // 2) Si le CDN est activé, on résout la version DDragon maintenant (optim perf)
+  let version = "";
+  if (USE_DDRAGON) {
+    try {
+      version = await resolveDDragonVersion();
+    } catch (e) {
+      // En cas d’échec réseau (rare), on laisse version="" et on retombera sur le local
+      console.warn("[champions] Impossible de résoudre la version Data Dragon -> fallback local", e);
+      version = "";
+    }
+  }
+
   const champions: ChampionMeta[] = [];
 
+  // 3) Parcourir chaque fichier et mapper les champs utiles
   for (const file of files) {
     if (!file.endsWith(".json")) continue;
+
     const full = path.join(DATA_DIR, file);
+
     try {
       const raw = await fs.readFile(full, "utf-8");
       const parsed = JSON.parse(raw);
 
-      // Le JSON DDragon-like est souvent { data: { Aatrox: { ... } } }
-      const root = parsed.data ? Object.values(parsed.data)[0] : parsed;
+      // Les JSON DDragon-like sont souvent { data: { Aatrox: { ... } } }
+      const root = parsed.data ? (Object.values(parsed.data)[0] as any) : parsed;
       if (!root) continue;
 
       const id: string = root.id;
@@ -52,9 +93,16 @@ export async function getChampionsFromDisk(): Promise<ChampionMeta[]> {
       const blurb: string | undefined = root.blurb;
       const lore: string | undefined = root.lore;
 
-      // Image : on suppose public/assets/champions/<ID>.png
-      const imageFile = root.image?.full ?? `${id}.png`;
+      // Image : comme avant, on suppose public/assets/champions/<ID>.png
+      const imageFile: string = root.image?.full ?? `${id}.png`;
+
+      // Chemin local (rétro‑compatibilité totale)
       const imagePath = `${PUBLIC_PREFIX}/${imageFile}`; // ex: /assets/champions/Aatrox.png
+
+      // URL finale : CDN si activé ET version résolue, sinon local
+      const imageUrl = version
+        ? getChampionPortraitUrl(version, imageFile, imagePath)
+        : imagePath;
 
       champions.push({
         id,
@@ -66,14 +114,17 @@ export async function getChampionsFromDisk(): Promise<ChampionMeta[]> {
         partype,
         blurb,
         lore,
-        imagePath,
+        imagePath,     // garde l’ancien champ (legacy)
+        imageUrl,      // **à utiliser** dans l’UI
+        ddragonVersion: version || undefined,
       });
     } catch (e) {
       console.error("[champions] Erreur de parsing pour", file, e);
     }
   }
 
-  // Tri alpha par nom (comme demandé)
+  // 4) Tri alpha par nom (comme tu le faisais)
   champions.sort((a, b) => a.name.localeCompare(b.name, "fr", { sensitivity: "base" }));
+
   return champions;
 }
