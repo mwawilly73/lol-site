@@ -1,0 +1,53 @@
+# --- Node / Next.js ---
+node_modules/
+.next/
+out/
+dist/
+coverage/
+
+# Next.js build artifacts
+.next/cache/
+
+# Env & local
+.env
+.env.*.local
+*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# VS Code settings backup (on peut garder .vscode/settings.json si utile)
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Lockfiles (tu peux choisir d’en garder 1 si tu veux figer les versions)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Runtime
+*.pid
+*.seed
+*.pid.lock
+
+# Storybook / Tests (si un jour)
+storybook-static/
+
+# Images optimisées générées (si tu en génères)
+public/.cache/
+
+# Ver ce l / deploy
+.vercel
+
+# Sauvegardes diverses
+*.tmp
+*.temp

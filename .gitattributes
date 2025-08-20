@@ -1,0 +1,10 @@
+# Normalisation des fins de lignes
+* text=auto eol=lf
+
+# Images binaires (pas de diff texte)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.svg text eol=lf
