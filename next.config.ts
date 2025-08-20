@@ -1,3 +1,4 @@
+
 // next.config.ts
 import type { NextConfig } from "next";
 
@@ -10,11 +11,12 @@ const isDev = process.env.NODE_ENV !== "production";
  * En production :
  *  - CSP stricte, sans 'unsafe-eval', prête à être ajustée (ex: AdSense) plus tard.
  */
+
 const CSP_PROD = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'", // tu pourras retirer 'unsafe-inline' si tout est purifié
-  "img-src 'self' data: blob:",
+  "style-src 'self' 'unsafe-inline'",  // tu pourras retirer 'unsafe-inline' si tout est purifié
+  "img-src 'self' data: blob: https://ddragon.leagueoflegends.com", // 👈 ajout CDN Riot ici
   "font-src 'self' data:",
   "connect-src 'self'",
   "frame-src 'self'",
@@ -32,6 +34,13 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
     unoptimized: false,
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "ddragon.leagueoflegends.com",
+        pathname: "/**", // 👈 permet toutes les images du CDN Riot
+      },
+    ],
   },
   async headers() {
     // 👉 En DEV: aucun header sécurité (retourne un tableau vide)
@@ -47,3 +56,4 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
+
