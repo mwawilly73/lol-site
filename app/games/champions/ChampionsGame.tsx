@@ -1,15 +1,5 @@
 // app/games/champions/ChampionsGame.tsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Matching intelligent des noms :
-//  - casse/accents/apostrophes/espaces/ponctuation ignorés
-//  - romains ⇄ chiffres (IV -> 4)
-//  - alias explicites (Maitre Yi -> Master Yi, Wukong <-> MonkeyKing, ...)
-//  - alias automatiques par **tokens du nom** (>=3 lettres) → ex :
-//      "Nunu & Willump" => "nunu", "willump"
-//      "Renata Glasc"   => "renata", "glasc"
-//  - secours Levenshtein (<= 1) seulement si saisie >= 4 lettres
-//  - règle entrées 2–3 lettres : **exact uniquement** (pas de fuzzy)
-// Conserve : timer, pause/reprendre, reset total, UI, etc.
+// (fichier complet avec le sélecteur "Facile")
 // ─────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -25,22 +15,16 @@ import {
 import type { ChampionMeta } from "@/lib/champions";
 import ChampionCard from "@/components/ChampionCard";
 
-/* 1) Normalisation agressive :
-   - minuscules
-   - supprime accents
-   - supprime espaces, apostrophes, tirets, points et tout non alphanumérique
-   -> "K'Santé" => "ksante", "Le Blanc" => "leblanc", "Jarvan IV" => "jarvaniv"
-*/
+/* ... (toute ta logique norm/lev/aliases inchangée) ... */
+
 function norm(s: string) {
   return s
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")      // accents
-    .replace(/['’`´^~\-_.\s]/g, "")       // séparateurs mous
-    .replace(/[^a-z0-9]/g, "");           // garde a-z0-9
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['’`´^~\-_.\s]/g, "")
+    .replace(/[^a-z0-9]/g, "");
 }
-
-/* 2) Levenshtein (secours) */
 function lev(a: string, b: string) {
   if (a === b) return 0;
   const m = a.length, n = b.length;
@@ -62,94 +46,43 @@ function lev(a: string, b: string) {
   }
   return dp[m][n];
 }
-
-/* 3) Alias explicites (après norm()) : clés & valeurs déjà normalisées */
 const EXPLICIT_ALIASES: Record<string, string> = {
-  // MonkeyKing / Wukong
   monkeyking: "wukong",
   wukong: "wukong",
-
-  // Master Yi — Maître/Maitre Yi
   maitreyi: "masteryi",
   masteryi: "masteryi",
-
-  // Jarvan IV — "jarvan", "jarvan4", "jarvan iv"
   jarvan: "jarvaniv",
   jarvan4: "jarvaniv",
   jarvaniv: "jarvaniv",
-
-  // LeBlanc — "le blanc"
   leblanc: "leblanc",
-
-  // K'Santé — toutes variantes reviennent à "ksante"
   ksante: "ksante",
 };
-
-/* Utilitaire : retire un suffixe numérique final (ex: "jarvan4" -> "jarvan") */
 function stripTrailingNumber(s: string) {
   const m = s.match(/^(.*?)(\d+)$/);
   return m ? m[1] : s;
 }
-
-/* 4) Génère les alias utiles par champion (retourne un tableau de clés normalisées)
-      - name normalisé
-      - alias explicites (si concerné)
-      - **tokens du nom** (>=3 lettres), ex :
-          "Nunu & Willump"  → "nunu", "willump"
-          "Renata Glasc"    → "renata", "glasc"
-*/
 function aliasKeysForChampion(c: ChampionMeta): string[] {
   const keys = new Set<string>();
-
-  // clé principale (nom complet normalisé)
   const nName = norm(c.name);
   if (nName) keys.add(nName);
-
-  // alias explicites connus
-  if (EXPLICIT_ALIASES[nName]) {
-    keys.add(EXPLICIT_ALIASES[nName]); // map vers canon
-  }
-
-  // tokens du nom (>=3 lettres), split sur non alphanum
+  if (EXPLICIT_ALIASES[nName]) keys.add(EXPLICIT_ALIASES[nName]);
   const rawTokens = (c.name || "")
     .split(/[^A-Za-z0-9]+/g)
     .map((t) => norm(t))
     .filter((t) => t && t.length >= 3);
-
   for (const t of rawTokens) keys.add(t);
-
-  // Cas particuliers supplémentaires déjà couverts par tokens,
-  // mais on “assure” pour les exemples demandés :
-  // - "Nunu & Willump" : tokens donnent "nunu", "willump"
-  // - "Renata Glasc" : tokens donnent "renata", "glasc"
-
-  // Jarvan : si le nom contient IV, on ajoute "jarvan" et "jarvan4"
   if (nName === "jarvaniv") {
     keys.add("jarvan");
     keys.add("jarvan4");
   }
-
-  // Master Yi : ajoute aussi "maitreyi"
-  if (nName === "masteryi") {
-    keys.add("maitreyi");
-  }
-
-  // Wukong/MonkeyKing : déjà couverts par EXPLICIT_ALIASES, on ajoute l’autre si besoin
+  if (nName === "masteryi") keys.add("maitreyi");
   if (nName === "wukong") keys.add("monkeyking");
   if (nName === "monkeyking") keys.add("wukong");
-
   return Array.from(keys);
 }
-
-/* 5) Prépare les index de recherche :
-   - lookup : Map<clé normalisée, ChampionMeta>
-   - shortKeys: Set des **clés ajoutées** qui font 2–3 lettres (ex: "vi", "jax", "lux", "zed")
-     (sert à bloquer la tolérance pour ces cibles)
-*/
 function buildLookup(champions: ChampionMeta[]) {
   const lookup = new Map<string, ChampionMeta>();
   const shortKeys = new Set<string>();
-
   for (const c of champions) {
     const keys = aliasKeysForChampion(c);
     for (const k of keys) {
@@ -179,6 +112,9 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 🔀 Mode Facile (aperçu flouté) vs Normal (aucune image avant découverte)
+  const [easyMode, setEasyMode] = useState(false);
 
   // Indexes (lookup + petites clés)
   const { lookup, shortKeys } = useMemo(
@@ -215,14 +151,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     inputRef.current?.focus();
   };
 
-  /* 6) Tente de révéler :
-        - direct via lookup (noms, alias, tokens)
-        - sinon fuzzy avec seuil dépendant de la longueur de la **saisie**
-          * si saisie < 4 chars => seuil = 0 (AUCUNE faute tolérée)
-          * si saisie >= 4 => seuil = 1
-        - en fuzzy, on évite les **cibles** dont la clé est courte (2–3)
-          pour empêcher "v" => "vex", etc.
-  */
+  // Essai de révélation
   const tryReveal = useCallback(
     (raw: string) => {
       const q = norm(raw.trim());
@@ -233,7 +162,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
         return;
       }
 
-      // 1) Direct match (noms + alias + tokens)
+      // 1) Direct match
       const direct = lookup.get(q);
       if (direct) {
         if (!revealed.has(direct.slug)) {
@@ -245,19 +174,19 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
         return;
       }
 
-      // 2) Fuzzy (seuil selon la longueur de la **requête**)
+      // 2) Fuzzy (tolérance selon taille requête)
       const threshold = q.length >= 4 ? 1 : 0;
       if (threshold === 0) {
         setLastResult("❌ Aucun champion correspondant");
         return;
       }
 
-      // 3) Recherche du meilleur candidat (éviter cibles à clé courte)
+      // 3) Meilleur candidat (évite cibles à clé courte)
       let best: ChampionMeta | undefined;
       let bestD = Infinity;
 
       for (const [key, champ] of lookup) {
-        if (shortKeys.has(key)) continue; // évite faux positifs vers noms courts
+        if (shortKeys.has(key)) continue;
         const d = lev(q, key);
         if (d < bestD) {
           bestD = d;
@@ -294,11 +223,37 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     }
   };
 
+  // UI: petit switch "Facile" avec bulle qui glisse
+  const Switch = (
+    <button
+      type="button"
+      onClick={() => setEasyMode((v) => !v)}
+      className="relative inline-flex h-6 w-12 items-center rounded-full border border-white/15 bg-white/10 transition focus:outline-none"
+      role="switch"
+      aria-checked={easyMode}
+      aria-label="Activer le mode Facile"
+      title={`Facile : ${easyMode ? "Oui" : "Non"}`}
+    >
+      <span
+        className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+          easyMode ? "translate-x-6" : "translate-x-0"
+        }`}
+      />
+      <span className="sr-only">Facile</span>
+    </button>
+  );
+
   return (
     <div className="space-y-6">
       {/* Ligne d’infos */}
-      <div className="info-row">
-        <div /> {/* spacer */}
+      <div className="info-row flex items-center gap-3">
+        {/* Switch Facile */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-white/70">Facile</span>
+          {Switch}
+          <span className="text-sm text-white/70">{easyMode ? "Oui" : "Non"}</span>
+        </div>
+
         <div style={{ marginLeft: "auto", display: "flex", gap: ".5rem", alignItems: "center" }}>
           <div className="badge">Trouvés : {found}/{totalPlayable}</div>
           <div className="badge">🎯 Objectif : {targetTotal}</div>
@@ -347,13 +302,15 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
         </div>
       </div>
 
-      {/* Grille des cartes : image + nom + caractéristiques visibles UNIQUEMENT si trouvé */}
+      {/* Grille des cartes : image visible en mode Facile (floutée), sinon invisible.
+          -> on transmet previewMode="blur" en Facile et "none" en Normal */}
       <div className="cards-grid grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
         {initialChampions.map((c) => (
           <ChampionCard
             key={c.slug}
             champion={c}
             isRevealed={revealed.has(c.slug)}
+            previewMode={easyMode ? "blur" : "none"}
           />
         ))}
       </div>
