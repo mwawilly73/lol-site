@@ -1,135 +1,108 @@
 // components/ChampionCard.tsx
-// ---------------------------------------------------------------------
-// Carte "jeu":
-// - previewMode: "none" (normal) | "blur" (facile)
-// - Bouton Aide : centré et légèrement descendu (top ~62%)
-// - Nom + tags visibles UNIQUEMENT si révélé (pas de lore)
-// ---------------------------------------------------------------------
+// ─────────────────────────────────────────────────────────────────────────────
+// Cartes carrées nettes : on passe à "squareHD" (champion-icons CDragon) avec fallback.
+// - Next/Image optimisé (quality=90 + placeholder blur).
+// - Non révélé (facile) : blur renforcé + désaturation + contraste ↓.
+// - Non révélé (normal) : dos de carte "?".
+// ─────────────────────────────────────────────────────────────────────────────
 
-import { useId, useState } from "react";
 import Image from "next/image";
 import type { ChampionMeta } from "@/lib/champions";
-
-type PreviewMode = "none" | "blur";
+import { getChampionPortraitUrl, DEFAULT_BLUR_DATA_URL } from "@/lib/championAssets";
 
 type Props = {
   champion: ChampionMeta;
   isRevealed: boolean;
-  previewMode?: PreviewMode;
+  previewMode?: "none" | "blur";
+  isSelected?: boolean;
+  onCardClick?: (slug: string) => void;
 };
 
-export default function ChampionCard({ champion, isRevealed, previewMode = "blur" }: Props) {
-  const uid = useId();
-  const [copied, setCopied] = useState(false);
+export default function ChampionCard({
+  champion,
+  isRevealed,
+  previewMode = "none",
+  isSelected = false,
+  onCardClick,
+}: Props) {
+  // 👉 Carré HD **fiable** (champion-icons). On passe la clé numérique.
+  const imgSrc =
+    getChampionPortraitUrl(champion.id, champion.imagePath, {
+      variant: "squareHD",
+      riotKey: champion.key, // clé numérique (ex: "266")
+    }) || champion.imagePath;
 
-  const name = champion?.name ?? "";
-  const title = champion?.title ?? "";
-  const roles = Array.isArray(champion?.roles) ? champion.roles : [];
-  const partype = champion?.partype ?? "";
-  const img = champion?.imageUrl || champion?.imagePath || "";
-
-  async function copyTitle() {
-    try {
-      await navigator.clipboard.writeText(title);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {}
-  }
-
-  const hiddenFilters = "grayscale blur-[4px] brightness-75";
+  const handleCardClick = () => onCardClick?.(champion.slug);
+  const handleKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onCardClick?.(champion.slug);
+    }
+  };
 
   return (
-    <div className="relative rounded-lg shadow hover:shadow-xl transition border border-white/10 overflow-hidden">
-      {/* IMAGE */}
-      <div className="relative w-full aspect-square bg-white/5">
-        {isRevealed ? (
-          img ? (
-            <Image
-              src={img}
-              alt={name || "Champion LoL"}
-              fill
-              sizes="(max-width: 768px) 50vw,(max-width: 1200px) 25vw,200px"
-              className="object-cover"
-              priority={false}
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-white/60">
-              {name || "Champion"}
+    <div
+      data-champion-card
+      data-slug={champion.slug}
+      role="button"
+      tabIndex={0}
+      onClick={handleCardClick}
+      onKeyDown={handleKeyDown}
+      className={`group relative block rounded-xl overflow-hidden
+        ring-1 ring-white/10 bg-black hover:ring-white/20 transition
+        ${isSelected ? "ring-2 ring-indigo-400 ring-offset-2 ring-offset-gray-900" : ""}
+      `}
+      aria-pressed={isSelected}
+      aria-label={isRevealed ? champion.name : "Carte cachée"}
+    >
+      {/* Conteneur carré */}
+      <div className="relative aspect-square select-none">
+        {/* Image HD carrée */}
+        <Image
+          src={imgSrc}
+          alt={champion.name}
+          fill
+          sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 22vw"
+          quality={90}
+          placeholder="blur"
+          blurDataURL={DEFAULT_BLUR_DATA_URL}
+          className={`transition-opacity object-contain
+            ${
+              isRevealed
+                ? "opacity-100"
+                : previewMode === "blur"
+                ? "grayscale blur-[6px] md:blur-[8px] opacity-90 saturate-[0.8] contrast-[0.85]"
+                : "opacity-0"
+            }
+          `}
+          priority={false}
+        />
+
+        {/* Dos de carte : visible uniquement si NON révélé ET mode normal */}
+        {!isRevealed && previewMode === "none" && (
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
+            <div className="h-20 w-20 md:h-24 md:w-24 rounded-full border-2 border-white/20 bg-black/40 shadow-inner flex items-center justify-center">
+              <span className="text-4xl md:text-5xl font-extrabold text-white/80 select-none">?</span>
             </div>
-          )
-        ) : previewMode === "blur" && img ? (
-          <Image
-            src={img}
-            alt="Aperçu flouté"
-            fill
-            sizes="(max-width: 768px) 50vw,(max-width: 1200px) 25vw,200px"
-            className={`object-cover ${hiddenFilters}`}
-            priority={false}
-          />
-        ) : (
-          <div className="h-full w-full" />
+          </div>
         )}
 
-        {/* BOUTON AIDE (centré, descendu) */}
-        {!isRevealed && title && (
-          <div className="absolute inset-x-0 top-[62%] flex items-center justify-center pointer-events-none">
-            <div className="group relative pointer-events-auto">
-              <button
-                type="button"
-                aria-describedby={`hint-${uid}`}
-                className="px-3 py-1.5 text-xs rounded bg-white/15 hover:bg-white/25 border border-white/20 backdrop-blur"
-              >
-                Aide
-              </button>
-
-              {/* TOOLTIP */}
-              <div
-                id={`hint-${uid}`}
-                role="tooltip"
-                className="invisible opacity-0 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 transition-opacity duration-150 absolute left-1/2 -translate-x-1/2 -top-2 -translate-y-full min-w-[12rem] max-w-[18rem] rounded-lg border border-white/15 bg-black/80 backdrop-blur p-2 text-center"
-              >
-                <div className="text-[11px] uppercase tracking-wide text-white/60">
-                  Titre du champion
-                </div>
-                <button
-                  type="button"
-                  onClick={copyTitle}
-                  className="mt-1 text-sm text-white hover:underline focus:underline"
-                >
-                  {title}
-                </button>
-                <div
-                  className={`mt-1 text-[11px] ${
-                    copied ? "text-emerald-400" : "text-white/40"
-                  }`}
-                  aria-live="polite"
-                >
-                  {copied ? "Copié !" : "Clique pour copier"}
-                </div>
-                <div className="absolute left-1/2 -translate-x-1/2 bottom-0 translate-y-full w-2 h-2 rotate-45 bg-black/80 border-l border-t border-white/15" />
+        {/* Bandeau d'infos (uniquement si révélée) */}
+        {isRevealed && (
+          <>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 p-2">
+              <div className="rounded-md bg-black/60 ring-1 ring-white/10 px-2 py-1.5">
+                <div className="text-sm font-semibold text-white">{champion.name}</div>
+                <div className="text-xs text-white/80">{champion.title}</div>
+                {champion.roles?.length > 0 && (
+                  <div className="mt-1 text-[11px] text-white/75">
+                    {champion.roles.join(" • ")}
+                  </div>
+                )}
               </div>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* CONTENU TEXTE */}
-      <div className="p-2 text-center">
-        {isRevealed ? (
-          <>
-            <h3 className="text-lg font-semibold">{name}</h3>
-            <p className="text-sm text-gray-400">
-              {[roles.join(", "), partype].filter(Boolean).join(" • ")}
-            </p>
           </>
-        ) : (
-          <div className="flex flex-col items-center gap-2">
-            <div className="h-5 w-28 rounded bg-white/5" />
-            <div className="flex items-center justify-center gap-2">
-              <div className="h-4 w-16 rounded bg-white/5" />
-              <div className="h-4 w-10 rounded bg-white/5" />
-            </div>
-          </div>
         )}
       </div>
     </div>

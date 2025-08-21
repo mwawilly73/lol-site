@@ -1,13 +1,11 @@
 // app/games/champions/ChampionsGame.tsx
-// Mobile-first + double-barre stable (header plein + barre compacte fixed).
-// Validation: focus ciblé + preventScroll (ne remonte jamais la page).
-// Win overlay centré + timer stoppé à la victoire.
-// Tolérance alias spé pour noms difficiles (Shyvana, Qiyana, Taliyah, Tryndamere, Xin Zhao, Tahm Kench).
 // ─────────────────────────────────────────────────────────────────────────────
-// DEMO: Tous les blocs “mode démo (Simuler victoire)” sont **commentés** mais
-//       conservés. Pour réactiver, supprime les commentaires des sections
-//       repérées par “// DEMO:” ci-dessous.
+// MÀJ principale : sticky bar avec apparition FLUIDE (opacity + bg alpha + translate)
+// - compactProgress ∈ [0..1] -> interpolation (opacity / bg / translateY)
+// - plus aucun "saut" de transparence entre deux états.
+// Le reste : focus pad, dos de carte ?, pause largeur fixe, règles, victoire, etc.
 // ─────────────────────────────────────────────────────────────────────────────
+
 "use client";
 
 import {
@@ -19,14 +17,10 @@ import {
   useState,
   KeyboardEvent as ReactKeyboardEvent,
 } from "react";
-// DEMO: importer si tu réactives le paramètre d’URL ?win=1&t=SECONDES
-// import { useSearchParams } from "next/navigation";
-
 import type { ChampionMeta } from "@/lib/champions";
 import ChampionCard from "@/components/ChampionCard";
 
 /* ------------------------------ Utils ------------------------------ */
-// Normalisation agressive pour matcher les noms
 function norm(s: string) {
   return s
     .toLowerCase()
@@ -35,7 +29,6 @@ function norm(s: string) {
     .replace(/['’`´^~\-_.\s]/g, "")
     .replace(/[^a-z0-9]/g, "");
 }
-// Levenshtein (secours)
 function lev(a: string, b: string) {
   if (a === b) return 0;
   const m = a.length, n = b.length;
@@ -70,8 +63,7 @@ const EXPLICIT_ALIASES: Record<string, string> = {
   leblanc: "leblanc",
   ksante: "ksante",
 };
-
-/* Fautes usuelles par champion (après norm()) */
+/* fautes usuelles par champion */
 const SPECIAL_ALIASES_BY_CANON: Record<string, string[]> = {
   shyvana: ["shivana", "shyvanna", "shivanna", "shyvana"],
   qiyana: ["qiana", "quiana", "kiyana", "kiana", "qiyanna", "qyiana"],
@@ -88,31 +80,26 @@ const SPECIAL_ALIASES_BY_CANON: Record<string, string[]> = {
 function aliasKeysForChampion(c: ChampionMeta): string[] {
   const keys = new Set<string>();
   const nName = norm(c.name);
-
   if (nName) keys.add(nName);
   if (EXPLICIT_ALIASES[nName]) keys.add(EXPLICIT_ALIASES[nName]);
-
   (c.name || "")
     .split(/[^A-Za-z0-9]+/g)
     .map((t) => norm(t))
     .filter((t) => t && t.length >= 3)
     .forEach((t) => keys.add(t));
-
   if (nName === "jarvaniv") { keys.add("jarvan"); keys.add("jarvan4"); }
   if (nName === "masteryi") keys.add("maitreyi");
   if (nName === "wukong") keys.add("monkeyking");
   if (nName === "monkeyking") keys.add("wukong");
-
   const extras = SPECIAL_ALIASES_BY_CANON[nName];
   if (extras) extras.forEach((a) => keys.add(a));
-
   return Array.from(keys);
 }
 
 /* ------------------------- Index de recherche ---------------------- */
 function buildLookup(champions: ChampionMeta[]) {
   const lookup = new Map<string, ChampionMeta>();
-  const shortKeys = new Set<string>(); // "vi","jax",...
+  const shortKeys = new Set<string>();
   for (const c of champions) {
     for (const k of aliasKeysForChampion(c)) {
       lookup.set(k, c);
@@ -120,6 +107,25 @@ function buildLookup(champions: ChampionMeta[]) {
     }
   }
   return { lookup, shortKeys };
+}
+
+/* ----------------------- Helpers Indice visuel --------------------- */
+function revealName(name: string, lettersToShow: number) {
+  if (lettersToShow <= 0) return name.replace(/[A-Za-zÀ-ÖØ-öø-ÿ]/g, "•");
+  let left = lettersToShow;
+  const chars = Array.from(name);
+  return chars
+    .map((ch) => {
+      if (/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(ch)) {
+        if (left > 0) { left -= 1; return ch; }
+        return "•";
+      }
+      return ch;
+    })
+    .join("");
+}
+function countLetters(name: string) {
+  return (name.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || []).length;
 }
 
 /* ----------------------------- Props -------------------------------- */
@@ -130,15 +136,13 @@ type Props = {
 
 /* ============================ Composant ============================= */
 export default function ChampionsGame({ initialChampions, targetTotal }: Props) {
-  // DEMO: si tu réactives le bouton DEV ou ?win=1, tu peux aussi remettre isDev et useSearchParams
-  // const isDev = process.env.NODE_ENV !== "production";
-  // const searchParams = useSearchParams();
-
-  // ÉTATS DE JEU
+  // ÉTATS
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [value, setValue] = useState("");
 
-  // Inputs (header plein & barre compacte)
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [hintBySlug, setHintBySlug] = useState<Record<string, number>>({});
+
   const headerInputRef = useRef<HTMLInputElement>(null);
   const compactInputRef = useRef<HTMLInputElement>(null);
 
@@ -151,35 +155,42 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
 
   const [easyMode, setEasyMode] = useState(false);
 
-  // DEMO: badge “Mode démo”
-  // const [isDemo, setIsDemo] = useState(false);
-
-  // Barre compacte visible après avoir scrollé
+  // Sticky : on passe d'un booléen à un PROGRÈS 0..1 pour transition lisse
   const headerEndRef = useRef<HTMLDivElement | null>(null);
-  const [showCompactBar, setShowCompactBar] = useState(false);
   const headerEndY = useRef(0);
+  const [compactProgress, setCompactProgress] = useState(0); // 0..1
+  const isCompactVisible = compactProgress > 0.5; // sert aux choix de focus
+  
+  const FADE_RANGE_PX = 160; // distance sur laquelle on "fade" la sticky bar
 
-  /* -------- Mesure du bas du header plein + scroll performant ------- */
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  /* ---------------------- Mesure + scroll (sticky) ------------------ */
   useLayoutEffect(() => {
     const measure = () => {
       const el = headerEndRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
       headerEndY.current = Math.floor(rect.top + window.scrollY);
-      setShowCompactBar(window.scrollY >= headerEndY.current);
+      // init progress selon la position initiale
+      const y = Math.max(0, window.scrollY - headerEndY.current);
+      const t = Math.min(1, y / FADE_RANGE_PX);
+      setCompactProgress(t);
     };
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
   }, []);
+
   useEffect(() => {
     let ticking = false;
     const onScroll = () => {
       if (ticking) return;
       ticking = true;
       requestAnimationFrame(() => {
-        const visible = window.scrollY >= headerEndY.current;
-        setShowCompactBar((prev) => (prev !== visible ? visible : prev));
+        const y = Math.max(0, window.scrollY - headerEndY.current);
+        const t = Math.min(1, y / FADE_RANGE_PX);
+        setCompactProgress((prev) => (prev !== t ? t : prev));
         ticking = false;
       });
     };
@@ -206,7 +217,6 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [paused]);
-
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
   const mm = String(minutes).padStart(2, "0");
@@ -222,36 +232,38 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     setLastTry("");
     setLastResult("—");
     setRevealed(new Set());
-    // setIsDemo(false); // DEMO
+    setSelectedSlug(null);
+    setHintBySlug({});
     window.scrollTo({ top: 0, behavior: "smooth" });
     headerInputRef.current?.focus({ preventScroll: true });
   };
 
   /* ---------------------------- Validation -------------------------- */
   const tryReveal = useCallback(
-    (raw: string) => {
+    (raw: string): boolean => {
+      let didReveal = false;
       const q = norm(raw.trim());
       setLastTry(raw.trim());
 
-      if (!q) { setLastResult("⛔ Saisie vide"); return; }
+      if (!q) { setLastResult("⛔ Saisie vide"); return didReveal; }
 
       // 1) Direct
       const direct = lookup.get(q);
       if (direct) {
         if (!revealed.has(direct.slug)) {
+          didReveal = true;
           setRevealed((prev) => new Set(prev).add(direct.slug));
           setLastResult(`✅ ${direct.name} trouvé`);
         } else {
           setLastResult(`ℹ️ ${direct.name} était déjà révélé`);
         }
-        return;
+        return didReveal;
       }
 
-      // 2) Fuzzy (tolère 1 faute si saisie >= 4)
+      // 2) Fuzzy
       const threshold = q.length >= 4 ? 1 : 0;
-      if (threshold === 0) { setLastResult("❌ Aucun champion correspondant"); return; }
+      if (threshold === 0) { setLastResult("❌ Aucun champion correspondant"); return didReveal; }
 
-      // 3) Meilleur candidat (évite cibles à clé courte)
       let best: ChampionMeta | undefined;
       let bestD = Infinity;
       for (const [key, champ] of lookup) {
@@ -261,6 +273,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
       }
       if (best && bestD <= threshold) {
         if (!revealed.has(best.slug)) {
+          didReveal = true;
           setRevealed((prev) => new Set(prev).add(best!.slug));
           setLastResult(`✅ ${best.name} (faute tolérée)`);
         } else {
@@ -269,23 +282,20 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
       } else {
         setLastResult("❌ Aucun champion correspondant");
       }
+      return didReveal;
     },
     [lookup, revealed, shortKeys]
   );
 
-  // from = "header" | "compact"
+  // Valider depuis header/sticky (input global)
   const validate = (from?: "header" | "compact") => {
     if (!value.trim()) return;
-    tryReveal(value);
+    const didReveal = tryReveal(value);
     setValue("");
 
-    // focus sans scroll sur l'input visible
-    const wantCompact = from === "compact" || showCompactBar;
+    const wantCompact = from === "compact" || isCompactVisible;
     const target = wantCompact ? compactInputRef.current : headerInputRef.current;
-    if (target?.focus) {
-      try { target.focus({ preventScroll: true }); }
-      catch { target.focus(); }
-    }
+    try { target?.focus?.({ preventScroll: true }); } catch { target?.focus?.(); }
   };
 
   const onKeyDownHeader = (e: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -295,45 +305,90 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     if (e.key === "Enter") { e.preventDefault(); validate("compact"); }
   };
 
-  /* -------------------------- MODE DÉMO WIN ------------------------- */
-  // DEMO: fonction de simulation
-  // const debugWin = useCallback((elapsedSeconds: number = 321) => {
-  //   const all = new Set(initialChampions.map((c) => c.slug));
-  //   setRevealed(all);
-  //   setElapsed(Math.max(0, Math.floor(elapsedSeconds)));
-  //   setPaused(true);
-  //   setLastTry("—");
-  //   setLastResult("🎯 Mode démo : victoire simulée");
-  //   setIsDemo(true);
-  // }, [initialChampions]);
+  /* -------------------------- Sélection carte ----------------------- */
+  const handleCardClick = (slug: string) => {
+    setSelectedSlug((curr) => (curr === slug ? null : slug));
+  };
 
-  // DEMO: ?win=1 (&t=SECONDES)
-  // useEffect(() => {
-  //   if (searchParams?.get("win") === "1") {
-  //     const tRaw = searchParams.get("t");
-  //     const t = tRaw != null && !Number.isNaN(Number(tRaw)) ? Math.max(0, parseInt(tRaw!, 10)) : 285;
-  //     debugWin(t);
-  //   }
-  // }, [searchParams, debugWin]);
+  const selectedChampion = useMemo(
+    () => initialChampions.find((c) => c.slug === selectedSlug) || null,
+    [selectedSlug, initialChampions]
+  );
+  const selectedIsRevealed = selectedSlug ? revealed.has(selectedSlug) : false;
 
-  // DEMO: Raccourci clavier Ctrl/Cmd + Shift + W
-  // useEffect(() => {
-  //   const handler = (e: any) => {
-  //     const isAccel = e.ctrlKey || e.metaKey;
-  //     if (isAccel && e.shiftKey && (e.key === "w" || e.key === "W")) {
-  //       e.preventDefault();
-  //       debugWin(); // 321s par défaut
-  //     }
-  //   };
-  //   window.addEventListener("keydown", handler, { passive: false } as any);
-  //   return () => window.removeEventListener("keydown", handler as any);
-  // }, [debugWin]);
+  // Focus PAD quand carte sélectionnée NON révélée
+  const padInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (selectedChampion && !revealed.has(selectedChampion.slug)) {
+      const id = requestAnimationFrame(() => {
+        try { padInputRef.current?.focus?.({ preventScroll: true }); }
+        catch { padInputRef.current?.focus?.(); }
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [selectedChampion, revealed]);
+
+  // Indice (révèle une lettre) + re-focus PAD
+  const showOneMoreLetter = () => {
+    if (!selectedChampion) return;
+    const totalLetters = countLetters(selectedChampion.name);
+    setHintBySlug((prev) => {
+      const current = prev[selectedChampion.slug] ?? 0;
+      const next = Math.min(totalLetters, current + 1);
+      return { ...prev, [selectedChampion.slug]: next };
+    });
+    setTimeout(() => {
+      try { padInputRef.current?.focus?.({ preventScroll: true }); }
+      catch { padInputRef.current?.focus?.(); }
+    }, 0);
+  };
+
+  // Saisie panneau (pad)
+  const [padGuess, setPadGuess] = useState("");
+  const validateFromPad = () => {
+    if (!padGuess.trim()) {
+      try { padInputRef.current?.focus?.({ preventScroll: true }); }
+      catch { padInputRef.current?.focus?.(); }
+      return;
+    }
+    const didReveal = tryReveal(padGuess);
+    setPadGuess("");
+
+    if (didReveal) {
+      // après réussite : focus input global (sticky si visible)
+      const target = isCompactVisible ? compactInputRef.current : headerInputRef.current;
+      try { target?.focus?.({ preventScroll: true }); } catch { target?.focus?.(); }
+    } else {
+      // sinon re-focus pad pour enchaîner
+      try { padInputRef.current?.focus?.({ preventScroll: true }); }
+      catch { padInputRef.current?.focus?.(); }
+    }
+  };
+
+  /* ----------------------- Click-outside & Escape ------------------- */
+  useEffect(() => {
+    if (!selectedChampion) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const panel = panelRef.current;
+      const target = e.target as HTMLElement | null;
+      if (!panel || !target) return;
+      if (panel.contains(target)) return;
+      const isCardClick = !!target.closest("[data-champion-card]");
+      if (isCardClick) return;
+      setSelectedSlug(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSelectedSlug(null); };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [selectedChampion]);
 
   /* ----------------------- Victoire & overlay ----------------------- */
   const hasWon = found >= totalPlayable && totalPlayable > 0;
-  useEffect(() => {
-    if (hasWon) setPaused(true); // stoppe le timer sur vraie victoire
-  }, [hasWon]);
+  useEffect(() => { if (hasWon) setPaused(true); }, [hasWon]);
 
   /* ================================ UI =============================== */
   return (
@@ -341,7 +396,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
       {/* ===== HEADER PLEIN (non-sticky) ===== */}
       <div className="mx-auto max-w-6xl px-3 sm:px-4 pt-4">
         <div className="rounded-2xl ring-1 ring-white/5 bg-black/10 backdrop-blur-sm px-3 sm:px-4 py-3">
-          {/* Progress */}
+          {/* Progression */}
           <div className="min-w-0">
             <div className="w-full h-3 bg-white/10 rounded-full overflow-hidden">
               <div
@@ -363,7 +418,6 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
 
           {/* Switch + Timer + Actions */}
           <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
-            {/* Switch */}
             <div className="flex items-center gap-2 shrink-0">
               <span className="hidden sm:inline text-sm text-white/80">Mode :</span>
               <button
@@ -379,7 +433,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
               >
                 <span
                   className={`absolute left-1 top-1 bg-white rounded-full shadow-md transform transition-transform duration-300
-                    h-5 w-5 sm:h-6 sm:w-6 ${easyMode ? "translate-x-7 sm:translate-x-8" : "" }
+                    h-5 w-5 sm:h-6 sm:w-6 ${easyMode ? "translate-x-7 sm:translate-x-8" : ""}
                   `}
                 />
                 <span className="sr-only">Facile</span>
@@ -389,7 +443,6 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
               </span>
             </div>
 
-            {/* Timer + actions */}
             <div className="flex items-center gap-2 sm:gap-2 ml-auto shrink-0">
               <div
                 className="rounded px-2 py-1 text-white/90 bg-white/10"
@@ -397,14 +450,17 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
               >
                 <span className="font-mono [font-variant-numeric:tabular-nums] text-xs sm:text-sm">⏱ {mm}:{ss}</span>
               </div>
+
+              {/* largeur fixe pour éviter tout décalage */}
               <button
                 type="button"
                 onClick={togglePause}
                 title={paused ? "Reprendre" : "Mettre en pause"}
-                className="px-2 sm:px-3 py-1.5 rounded-md bg-gray-700/70 hover:bg-gray-600/70 text-white text-xs sm:text-sm"
+                className="w-[112px] px-2 sm:px-3 py-1.5 rounded-md bg-gray-700/70 hover:bg-gray-600/70 text-white text-xs sm:text-sm text-center"
               >
                 {paused ? "Reprendre" : "Pause"}
               </button>
+
               <button
                 type="button"
                 onClick={resetAll}
@@ -413,24 +469,27 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
               >
                 Réinitialiser
               </button>
-
-              {/* DEMO: Bouton DEV “Simuler victoire” */}
-              {/*
-              {isDev && (
-                <button
-                  type="button"
-                  onClick={() => debugWin()}
-                  className="px-2 sm:px-3 py-1.5 rounded-md border border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs sm:text-sm"
-                  title="Simuler une victoire (Ctrl/Cmd + Shift + W) ou via ?win=1&t=SECONDES"
-                >
-                  Simuler victoire
-                </button>
-              )}
-              */}
             </div>
           </div>
 
-          {/* Input + Valider */}
+          {/* Règles + feedback */}
+          <div className="mt-3 text-xs sm:text-sm text-white/80 flex flex-wrap gap-x-3 justify-between" id="rulesHelp">
+            {/* Mobile : court */}
+            <span className="sm:hidden">Faute d&apos;orthographe tolérés</span>
+            {/* Desktop : détaillé */}
+            <span className="hidden sm:inline">
+              Règles : Légères faute d&apos;orthographe tolérés • Accents / Espaces / Points / Apostrophes - ignorés •
+            </span>
+            <span className="shrink-0">Cartes : {totalPlayable} chargées</span>
+          </div>
+
+          <div className="mt-2 p-3 rounded-md border border-white/5 bg-white/5">
+            <div className="text-xs sm:text-sm text-white/80">Dernier essai :</div>
+            <div className="text-sm sm:text-base text-white truncate">{lastTry || "—"}</div>
+            <div className="mt-1 text-xs sm:text-sm">{lastResult}</div>
+          </div>
+
+          {/* Champ global + Valider */}
           <div className="mt-3 flex items-stretch gap-2 sm:gap-3 min-w-0">
             <label htmlFor="championName" className="sr-only">Nom du champion</label>
             <input
@@ -439,7 +498,8 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
               type="text"
               autoComplete="off"
               placeholder="Tape un nom ( ex: Baron Nashor , Rift Herald ... )"
-              className="w-full min-w-0 px-3 py-2 rounded-md border border-white/10 bg-black/15 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm sm:text-base"
+              className="w-full min-w-0 px-3 py-2 rounded-md border bg-black/20 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm sm:text-base
+                         ring-2 ring-indigo-400/60 shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={onKeyDownHeader}
@@ -453,31 +513,32 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
               Valider
             </button>
           </div>
-
-          {/* Règles + feedback */}
-          <div className="mt-2 text-xs sm:text-sm text-white/80 flex flex-wrap gap-x-3 justify-between" id="rulesHelp">
-            <span className="truncate">Règles : 1 faute tolérée (≥ 4 lettres) • accents/espaces/apostrophes ignorés •</span>
-            <span className="shrink-0">Cartes : {totalPlayable} chargées</span>
-          </div>
-          <div className="mt-2 p-3 rounded-md border border-white/5 bg-white/5">
-            <div className="text-xs sm:text-sm text-white/80">Dernier essai :</div>
-            <div className="text-sm sm:text-base text-white truncate">{lastTry || "—"}</div>
-            <div className="mt-1 text-xs sm:text-sm">{lastResult}</div>
-          </div>
         </div>
 
-        {/* SENTINEL : bas du header plein */}
+        {/* SENTINEL */}
         <div ref={headerEndRef} className="h-px" aria-hidden="true" />
       </div>
 
-      {/* ===== BARRE COMPACTE FIXE (overlay) ===== */}
+      {/* ===== BARRE COMPACTE FIXE (overlay) — transition FLUIDE ===== */}
       <div
-        className={`fixed top-[max(0.5rem,env(safe-area-inset-top))] left-0 right-0 z-40 px-2 sm:px-4 transition-opacity duration-200
-          ${showCompactBar ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
-        `}
+        className="fixed top-[max(0.5rem,env(safe-area-inset-top))] left-0 right-0 z-40 px-2 sm:px-4 transition-all duration-300 ease-out will-change-[transform,opacity]"
+        style={{
+          opacity: compactProgress,                                     // fondu
+          transform: `translateY(${(-8 * (1 - compactProgress)).toFixed(2)}px)`, // petit slide
+          pointerEvents: compactProgress > 0 ? "auto" : "none",          // cliquable seulement visible
+        }}
       >
         <div className="mx-auto max-w-6xl">
-          <div className="rounded-2xl ring-1 ring-white/10 bg-black/20 backdrop-blur-md shadow-lg">
+          <div
+            className="rounded-2xl ring-1 ring-white/10 shadow-lg"
+            style={{
+              // fond plus opaque
+              backgroundColor: `rgba(0,0,0,${(0.80 * compactProgress).toFixed(3)})`,
+              // flou léger et progressif
+              backdropFilter: `blur(${(2 + 2 * compactProgress).toFixed(1)}px)`,
+              WebkitBackdropFilter: `blur(${(2 + 2 * compactProgress).toFixed(1)}px)`, // ✅ Safari
+            }}
+          >
             <div className="px-3 sm:px-4 py-2">
               {/* Progress mini */}
               <div className="min-w-0">
@@ -494,7 +555,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                 </div>
               </div>
 
-              {/* Switch + Timer */}
+              {/* Switch + Timer (bouton fixe) */}
               <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
                 <div className="flex items-center gap-2 shrink-0">
                   <button
@@ -522,23 +583,39 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
 
                 <div className="flex items-center gap-2 ml-auto shrink-0">
                   <div
-                    className="rounded px-2 py-1 text-white/90 bg-white/10"
-                    style={{ width: 70, textAlign: "center" }}
+                    className="rounded px-2 py-1 text-white/90"
+                    style={{
+                      width: 70,
+                      textAlign: "center",
+                      backgroundColor: "rgba(255,255,255,0.08)",
+                    }}
                   >
                     <span className="font-mono [font-variant-numeric:tabular-nums] text-xs">⏱ {mm}:{ss}</span>
                   </div>
+                  {/* largeur fixe */}
                   <button
                     type="button"
                     onClick={togglePause}
                     title={paused ? "Reprendre" : "Mettre en pause"}
-                    className="px-2 py-1 rounded-md bg-gray-700/70 hover:bg-gray-600/70 text-white text-xs"
+                    className="w-[44px] px-0 py-1 rounded-md bg-gray-700/70 hover:bg-gray-600/70 text-white text-xs text-center"
                   >
                     {paused ? "▶" : "⏸"}
                   </button>
                 </div>
               </div>
 
-              {/* Input + Valider compacts */}
+              {/* Dernier essai — compact */}
+              <div className="mt-2 rounded-md border border-white/10" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} aria-live="polite">
+                <div className="px-2 py-1.5">
+                  <div className="text-[11px] text-white/70">Dernier essai :</div>
+                  <div className="text-xs sm:text-sm text-white truncate" title={lastTry || "—"}>
+                    {lastTry || "—"}
+                  </div>
+                  <div className="mt-0.5 text-[11px] sm:text-xs">{lastResult}</div>
+                </div>
+              </div>
+
+              {/* Champ compact + Valider */}
               <div className="mt-2 flex items-stretch gap-2 min-w-0">
                 <label htmlFor="championName-compact" className="sr-only">Nom du champion</label>
                 <input
@@ -547,7 +624,8 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                   type="text"
                   autoComplete="off"
                   placeholder="Tape un nom ( ex: Baron Nashor , Rift Herald ... )"
-                  className="w/full min-w-0 rounded-md border border-white/10 bg-black/15 text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-indigo-500 px-3 py-1.5 text-sm"
+                  className="w-full min-w-0 rounded-md border bg-black/20 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 px-3 py-1.5 text-sm
+                             ring-2 ring-indigo-400/60 shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
                   onKeyDown={onKeyDownCompact}
@@ -559,15 +637,6 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                 >
                   Valider
                 </button>
-              </div>
-
-              {/* Dernier essai — compact */}
-              <div className="mt-2 rounded-md border border-white/10 bg-white/5 px-2 py-1.5" aria-live="polite">
-                <div className="text-[11px] text-white/70">Dernier essai :</div>
-                <div className="text-xs sm:text-sm text-white truncate" title={lastTry || "—"}>
-                  {lastTry || "—"}
-                </div>
-                <div className="mt-0.5 text-[11px] sm:text-xs">{lastResult}</div>
               </div>
             </div>
           </div>
@@ -583,12 +652,80 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
               champion={c}
               isRevealed={revealed.has(c.slug)}
               previewMode={easyMode ? "blur" : "none"}
+              isSelected={selectedSlug === c.slug}
+              onCardClick={handleCardClick}
             />
           ))}
         </div>
       </div>
 
-      {/* 🏁 OVERLAY DE FIN (centré, responsive) */}
+      {/* 🟣 PANNEAU FLOTTANT */}
+      {selectedChampion && (
+        <div
+          ref={panelRef}
+          className="fixed left-1/2 -translate-x-1/2 bottom-4 z-40 w-[min(760px,94vw)] rounded-2xl ring-1 ring-white/10 bg-black/70 backdrop-blur-md shadow-2xl px-3 sm:px-4 py-3"
+          role="dialog"
+          aria-label={selectedIsRevealed ? `Infos ${selectedChampion.name}` : `Saisir le nom pour ${selectedChampion.name}`}
+        >
+          {!selectedIsRevealed ? (
+            <>
+              <div className="text-xs sm:text-sm text-white/80 mb-1">
+                Carte sélectionnée : <span className="font-semibold">{selectedChampion.title}</span>
+              </div>
+              <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5 mb-2 text-sm sm:text-base">
+                {revealName(selectedChampion.name, hintBySlug[selectedChampion.slug] ?? 0)}
+              </div>
+              <div className="flex items-stretch gap-2">
+                <label htmlFor="pad-guess" className="sr-only">Proposition</label>
+                <input
+                  id="pad-guess"
+                  ref={padInputRef}
+                  type="text"
+                  autoComplete="off"
+                  placeholder="Écris le nom ici…"
+                  className="w-full min-w-0 px-3 py-2 rounded-md border bg-black/30 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
+                             ring-2 ring-indigo-400/60 shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
+                  value={padGuess}
+                  onChange={(e) => setPadGuess(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); validateFromPad(); } }}
+                />
+                <button
+                  type="button"
+                  onClick={showOneMoreLetter}
+                  className="px-3 py-2 rounded-md bg-amber-500/90 hover:bg-amber-400 text-black font-semibold text-sm shrink-0"
+                  title="Révéler une lettre"
+                >
+                  Indice
+                </button>
+                <button
+                  type="button"
+                  onClick={validateFromPad}
+                  className="px-3 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shrink-0"
+                >
+                  Valider
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-sm sm:text-base font-semibold">
+                {selectedChampion.name} <span className="text-white/70">— {selectedChampion.title}</span>
+              </div>
+              <div className="text-xs sm:text-sm text-white/80 flex flex-wrap gap-x-3 gap-y-1">
+                <span><strong>Rôles :</strong> {selectedChampion.roles?.join(" • ") || "—"}</span>
+                {selectedChampion.partype && (<span><strong>Ressource :</strong> {selectedChampion.partype}</span>)}
+              </div>
+              {selectedChampion.lore && (
+                <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs sm:text-sm text-white/90 whitespace-pre-line max-h-64 sm:max-h-72 overflow-y-auto">
+                  {selectedChampion.lore}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 🏁 OVERLAY DE FIN */}
       <div
         className={`fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 transition-opacity duration-200
           ${hasWon ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
@@ -598,20 +735,8 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
         aria-modal="true"
         aria-label="Fin de partie"
       >
-        {/* Fond assombri + blur */}
         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-        {/* Panneau */}
         <div className="relative w-full max-w-md rounded-2xl ring-1 ring-white/10 bg-gray-900 text-white shadow-2xl p-5 sm:p-6 text-center">
-          {/* DEMO: Badge “Mode démo” */}
-          {/*
-          {isDemo && (
-            <div className="absolute -top-2 right-4">
-              <span className="inline-flex items-center rounded-full bg-amber-500/90 text-black text-[11px] font-semibold px-2 py-0.5 shadow">
-                Mode démo
-              </span>
-            </div>
-          )}
-          */}
           <div className="text-3xl sm:text-4xl">🎉</div>
           <h2 className="mt-2 text-xl sm:text-2xl font-bold">Félicitations !</h2>
           <p className="mt-2 text-sm sm:text-base text-white/90">
@@ -622,8 +747,6 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
               {minutes}min/{String(seconds).padStart(2, "0")}sec
             </span>.
           </p>
-
-          {/* Bouton rejouer */}
           <div className="mt-4">
             <button
               type="button"
@@ -636,10 +759,10 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
         </div>
       </div>
 
-      {/* Bouton ▲ remonter */}
+      {/* ▲ Remonter — masqué sur mobile */}
       <button
         onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        className="fixed bottom-6 right-6 w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-lg z-40"
+        className="hidden md:flex fixed bottom-6 right-6 w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white items-center justify-center shadow-lg z-40"
         title="Remonter en haut"
         aria-label="Remonter en haut"
       >
