@@ -6,6 +6,7 @@
 // - Lore à la demande via Data Dragon.
 // - Auto-focus : quand le header n’est plus visible, on transfère le focus
 //   vers l’input sticky compact sans remonter la page.
+// - ⚙️ ESLint: plus de "unused vars" (didReveal/_).
 // ─────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -210,39 +211,26 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  /* 🆕 Auto-focus quand le header sort de l’écran
-     - Si l’input “fixe” (header) a le focus et que la sticky est pleinement visible,
-       on bascule le focus vers l’input sticky (compact) sans scroll.
-     - On ne vole PAS le focus si tu tapes dans le PAD (panneau bas).
-  */
-  const padInputRef = useRef<HTMLInputElement>(null); // (déclaré ici pour l’effet ci-dessous)
+  /* 🆕 Auto-focus quand le header sort de l’écran */
+  const padInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const active = document.activeElement as HTMLElement | null;
 
-    // Si sticky est active et que le focus est sur le champ header → basculer vers compact
     if (
       compactProgress >= COMPACT_FOCUS_THRESHOLD &&
       headerInputRef.current &&
       active === headerInputRef.current &&
-      !focusForcedOnceRef.current // évite de refaire 50 fois si on reste en bas
+      !focusForcedOnceRef.current
     ) {
-      // ne pas voler le focus au PAD si tu es en train de deviner une carte
+      // ne pas voler le focus au PAD si tu tapes dedans
       if (padInputRef.current && active === padInputRef.current) return;
 
-      try {
-        // On blur d’abord pour éviter que le navigateur tente de “le garder visible”
-        headerInputRef.current.blur();
-      } catch {}
-      try {
-        compactInputRef.current?.focus?.({ preventScroll: true });
-      } catch {
-        compactInputRef.current?.focus?.();
-      }
+      try { headerInputRef.current.blur(); } catch {}
+      try { compactInputRef.current?.focus?.({ preventScroll: true }); }
+      catch { compactInputRef.current?.focus?.(); }
       focusForcedOnceRef.current = true;
       return;
     }
-
-    // Reset du drapeau quand on remonte suffisamment (re-autorise un futur transfert)
     if (compactProgress < 0.2) {
       focusForcedOnceRef.current = false;
     }
@@ -346,12 +334,22 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
   // Valider depuis header/sticky (input global)
   const validate = (from?: "header" | "compact") => {
     if (!value.trim()) return;
-    const didReveal = tryReveal(value);
+    if (tryReveal(value)) {
+      // si trouvé → focus sur l’input adapté (compact si visible, sinon header)
+      const wantCompact = from === "compact" || isCompactVisible;
+      const target = wantCompact ? compactInputRef.current : headerInputRef.current;
+      try { target?.focus?.({ preventScroll: true }); } catch { target?.focus?.(); }
+    } else {
+      // si pas trouvé → on reste focus sur le même input
+      if (from === "compact" || isCompactVisible) {
+        try { compactInputRef.current?.focus?.({ preventScroll: true }); }
+        catch { compactInputRef.current?.focus?.(); }
+      } else {
+        try { headerInputRef.current?.focus?.({ preventScroll: true }); }
+        catch { headerInputRef.current?.focus?.(); }
+      }
+    }
     setValue("");
-
-    const wantCompact = from === "compact" || isCompactVisible;
-    const target = wantCompact ? compactInputRef.current : headerInputRef.current;
-    try { target?.focus?.({ preventScroll: true }); } catch { target?.focus?.(); }
   };
 
   const onKeyDownHeader = (e: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -394,7 +392,12 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     loreAbortRef.current = controller;
 
     setLoreLoading((m) => ({ ...m, [slug]: true }));
-    setLoreError((m) => { const { [slug]: _, ...rest } = m; return rest; });
+    // 🛠️ remplace la destructuration (_ inutilisé) par delete
+    setLoreError((m) => {
+      const next = { ...m };
+      delete next[slug];
+      return next;
+    });
 
     (async () => {
       try {
@@ -431,7 +434,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     setHintBySlug((prev) => {
       const current = prev[selectedChampion.slug] ?? 0;
       const next = Math.min(totalLetters, current + 1);
-      return { ...prev, [selectedChampion.slug]: next };
+      return { ...prev, [prev[selectedChampion.slug] ? selectedChampion.slug : selectedChampion.slug]: next };
     });
     setTimeout(() => {
       try { padInputRef.current?.focus?.({ preventScroll: true }); }
@@ -445,16 +448,14 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
       catch { padInputRef.current?.focus?.(); }
       return;
     }
-    const didReveal = tryReveal(padGuess);
-    setPadGuess("");
-
-    if (didReveal) {
+    if (tryReveal(padGuess)) {
       const target = isCompactVisible ? compactInputRef.current : headerInputRef.current;
       try { target?.focus?.({ preventScroll: true }); } catch { target?.focus?.(); }
     } else {
       try { padInputRef.current?.focus?.({ preventScroll: true }); }
       catch { padInputRef.current?.focus?.(); }
     }
+    setPadGuess("");
   };
 
   /* ----------------------- Click-outside & Escape ------------------- */
