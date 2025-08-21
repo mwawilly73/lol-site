@@ -1,0 +1,22 @@
+/* app/styles/layout.css */
+/* ────────────────────────────────────────────────────────────────────────────
+   Styles “structure” (layout général) — indépendants du thème/jeu.
+   Pas d’import Tailwind ici (ils sont dans globals.css).
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* app/styles/layout.css */
+.site-main {
+  min-height: 100dvh; /* occupe au moins toute la hauteur du viewport */
+}
+
+.site-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(to bottom, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+}
+
+/* Accessibilité : focus visible sur les liens de navigation */
+a:focus-visible {
+  outline: 2px solid #818cf8; /* indigo-400 */
+  outline-offset: 2px;
+  border-radius: 8px;
+}
