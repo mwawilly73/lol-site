@@ -1,15 +1,12 @@
 // app/games/champions/ChampionsGame.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-// Matching intelligent des noms :
-//  - casse/accents/apostrophes/espaces/ponctuation ignorés
-//  - romains ⇄ chiffres (IV -> 4)
-//  - alias explicites (Maitre Yi -> Master Yi, Wukong <-> MonkeyKing, ...)
-//  - alias automatiques par **tokens du nom** (>=3 lettres) → ex :
-//      "Nunu & Willump" => "nunu", "willump"
-//      "Renata Glasc"   => "renata", "glasc"
-//  - secours Levenshtein (<= 1) seulement si saisie >= 4 lettres
-//  - règle entrées 2–3 lettres : **exact uniquement** (pas de fuzzy)
-// Conserve : timer, pause/reprendre, reset total, UI, etc.
+// Points clés :
+// - Sticky compact : fondu fluide (opacity = compactProgress).
+// - Images carrées HD (dans ChampionCard).
+// - Lore à la demande via Data Dragon.
+// - Auto-focus : quand le header n’est plus visible, on transfère le focus
+//   vers l’input sticky compact sans remonter la page.
+// - ⚙️ ESLint: plus de "unused vars" (didReveal/_).
 // ─────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -17,30 +14,25 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  KeyboardEvent,
+  KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 import type { ChampionMeta } from "@/lib/champions";
 import ChampionCard from "@/components/ChampionCard";
+import { getChampionLoreFromCDN } from "@/lib/ddragon";
 
-/* 1) Normalisation agressive :
-   - minuscules
-   - supprime accents
-   - supprime espaces, apostrophes, tirets, points et tout non alphanumérique
-   -> "K'Santé" => "ksante", "Le Blanc" => "leblanc", "Jarvan IV" => "jarvaniv"
-*/
+/* ------------------------------ Utils ------------------------------ */
 function norm(s: string) {
   return s
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")      // accents
-    .replace(/['’`´^~\-_.\s]/g, "")       // séparateurs mous
-    .replace(/[^a-z0-9]/g, "");           // garde a-z0-9
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/['’`´^~\-_.\s]/g, "")
+    .replace(/[^a-z0-9]/g, "");
 }
-
-/* 2) Levenshtein (secours) */
 function lev(a: string, b: string) {
   if (a === b) return 0;
   const m = a.length, n = b.length;
@@ -63,96 +55,57 @@ function lev(a: string, b: string) {
   return dp[m][n];
 }
 
-/* 3) Alias explicites (après norm()) : clés & valeurs déjà normalisées */
+/* ------------------------- Alias explicites ------------------------ */
 const EXPLICIT_ALIASES: Record<string, string> = {
-  // MonkeyKing / Wukong
   monkeyking: "wukong",
   wukong: "wukong",
-
-  // Master Yi — Maître/Maitre Yi
   maitreyi: "masteryi",
   masteryi: "masteryi",
-
-  // Jarvan IV — "jarvan", "jarvan4", "jarvan iv"
   jarvan: "jarvaniv",
   jarvan4: "jarvaniv",
   jarvaniv: "jarvaniv",
-
-  // LeBlanc — "le blanc"
   leblanc: "leblanc",
-
-  // K'Santé — toutes variantes reviennent à "ksante"
   ksante: "ksante",
 };
+/* fautes usuelles par champion */
+const SPECIAL_ALIASES_BY_CANON: Record<string, string[]> = {
+  shyvana: ["shivana", "shyvanna", "shivanna", "shyvana"],
+  qiyana: ["qiana", "quiana", "kiyana", "kiana", "qiyanna", "qyiana"],
+  taliyah: ["talia", "taliya", "talya", "talyah"],
+  tryndamere: ["trindamer", "trindamere", "trynda", "trynd", "tryndam"],
+  xinzhao: ["xinzao", "xinzaho"],
+  tahmkench: ["tahmken", "tamkench", "tahmkenh", "tahmkench"],
+  kassadin: ["kasadin"],
+  katarina: ["katarena", "katarine"],
+  velkoz: ["velcoz", "velkoz"],
+};
 
-/* Utilitaire : retire un suffixe numérique final (ex: "jarvan4" -> "jarvan") */
-function stripTrailingNumber(s: string) {
-  const m = s.match(/^(.*?)(\d+)$/);
-  return m ? m[1] : s;
-}
-
-/* 4) Génère les alias utiles par champion (retourne un tableau de clés normalisées)
-      - name normalisé
-      - alias explicites (si concerné)
-      - **tokens du nom** (>=3 lettres), ex :
-          "Nunu & Willump"  → "nunu", "willump"
-          "Renata Glasc"    → "renata", "glasc"
-*/
+/* ---------------------- Clés par champion -------------------------- */
 function aliasKeysForChampion(c: ChampionMeta): string[] {
   const keys = new Set<string>();
-
-  // clé principale (nom complet normalisé)
   const nName = norm(c.name);
   if (nName) keys.add(nName);
-
-  // alias explicites connus
-  if (EXPLICIT_ALIASES[nName]) {
-    keys.add(EXPLICIT_ALIASES[nName]); // map vers canon
-  }
-
-  // tokens du nom (>=3 lettres), split sur non alphanum
-  const rawTokens = (c.name || "")
+  if (EXPLICIT_ALIASES[nName]) keys.add(EXPLICIT_ALIASES[nName]);
+  (c.name || "")
     .split(/[^A-Za-z0-9]+/g)
     .map((t) => norm(t))
-    .filter((t) => t && t.length >= 3);
-
-  for (const t of rawTokens) keys.add(t);
-
-  // Cas particuliers supplémentaires déjà couverts par tokens,
-  // mais on “assure” pour les exemples demandés :
-  // - "Nunu & Willump" : tokens donnent "nunu", "willump"
-  // - "Renata Glasc" : tokens donnent "renata", "glasc"
-
-  // Jarvan : si le nom contient IV, on ajoute "jarvan" et "jarvan4"
-  if (nName === "jarvaniv") {
-    keys.add("jarvan");
-    keys.add("jarvan4");
-  }
-
-  // Master Yi : ajoute aussi "maitreyi"
-  if (nName === "masteryi") {
-    keys.add("maitreyi");
-  }
-
-  // Wukong/MonkeyKing : déjà couverts par EXPLICIT_ALIASES, on ajoute l’autre si besoin
+    .filter((t) => t && t.length >= 3)
+    .forEach((t) => keys.add(t));
+  if (nName === "jarvaniv") { keys.add("jarvan"); keys.add("jarvan4"); }
+  if (nName === "masteryi") keys.add("maitreyi");
   if (nName === "wukong") keys.add("monkeyking");
   if (nName === "monkeyking") keys.add("wukong");
-
+  const extras = SPECIAL_ALIASES_BY_CANON[nName];
+  if (extras) extras.forEach((a) => keys.add(a));
   return Array.from(keys);
 }
 
-/* 5) Prépare les index de recherche :
-   - lookup : Map<clé normalisée, ChampionMeta>
-   - shortKeys: Set des **clés ajoutées** qui font 2–3 lettres (ex: "vi", "jax", "lux", "zed")
-     (sert à bloquer la tolérance pour ces cibles)
-*/
+/* ------------------------- Index de recherche ---------------------- */
 function buildLookup(champions: ChampionMeta[]) {
   const lookup = new Map<string, ChampionMeta>();
   const shortKeys = new Set<string>();
-
   for (const c of champions) {
-    const keys = aliasKeysForChampion(c);
-    for (const k of keys) {
+    for (const k of aliasKeysForChampion(c)) {
       lookup.set(k, c);
       if (k.length >= 2 && k.length <= 3) shortKeys.add(k);
     }
@@ -160,47 +113,151 @@ function buildLookup(champions: ChampionMeta[]) {
   return { lookup, shortKeys };
 }
 
+/* ----------------------- Helpers Indice visuel --------------------- */
+function revealName(name: string, lettersToShow: number) {
+  if (lettersToShow <= 0) return name.replace(/[A-Za-zÀ-ÖØ-öø-ÿ]/g, "•");
+  let left = lettersToShow;
+  const chars = Array.from(name);
+  return chars
+    .map((ch) => {
+      if (/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(ch)) {
+        if (left > 0) { left -= 1; return ch; }
+        return "•";
+      }
+      return ch;
+    })
+    .join("");
+}
+function countLetters(name: string) {
+  return (name.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || []).length;
+}
+
+/* ----------------------------- Props -------------------------------- */
 type Props = {
   initialChampions: ChampionMeta[];
   targetTotal: number;
 };
 
-export default function ChampionsGame({ initialChampions }: Props) {
-  // Cartes trouvées (par slug)
+/* ============================ Composant ============================= */
+export default function ChampionsGame({ initialChampions, targetTotal }: Props) {
+  // ÉTATS
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
-
-  // Saisie + feedback
   const [value, setValue] = useState("");
+
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [hintBySlug, setHintBySlug] = useState<Record<string, number>>({});
+
+  const headerInputRef = useRef<HTMLInputElement>(null);
+  const compactInputRef = useRef<HTMLInputElement>(null);
+
   const [lastTry, setLastTry] = useState<string>("");
   const [lastResult, setLastResult] = useState<string>("—");
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Timer
   const [elapsed, setElapsed] = useState(0);
   const [paused, setPaused] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Indexes (lookup + petites clés)
+  const [easyMode, setEasyMode] = useState(false);
+
+  // Sticky progress lisse
+  const headerEndRef = useRef<HTMLDivElement | null>(null);
+  const headerEndY = useRef(0);
+  const [compactProgress, setCompactProgress] = useState(0); // 0..1
+  const isCompactVisible = compactProgress > 0.5;
+  const FADE_RANGE_PX = 160;
+
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // Lore à la demande (cache)
+  const [loreBySlug, setLoreBySlug] = useState<Record<string, string>>({});
+  const [loreLoading, setLoreLoading] = useState<Record<string, boolean>>({});
+  const [loreError, setLoreError] = useState<Record<string, string>>({});
+  const loreAbortRef = useRef<AbortController | null>(null);
+
+  // 🆕 Hystérésis & seuil pour auto-focus sticky
+  const COMPACT_FOCUS_THRESHOLD = 0.95; // quand sticky est vraiment “active”
+  const focusForcedOnceRef = useRef(false); // évite les re-focus en boucle
+
+  /* ---------------------- Mesure + scroll (sticky) ------------------ */
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = headerEndRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      headerEndY.current = Math.floor(rect.top + window.scrollY);
+      const y = Math.max(0, window.scrollY - headerEndY.current);
+      const t = Math.min(1, y / FADE_RANGE_PX);
+      setCompactProgress(t);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  useEffect(() => {
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        const y = Math.max(0, window.scrollY - headerEndY.current);
+        const t = Math.min(1, y / FADE_RANGE_PX);
+        setCompactProgress((prev) => (prev !== t ? t : prev));
+        ticking = false;
+      });
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  /* 🆕 Auto-focus quand le header sort de l’écran */
+  const padInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const active = document.activeElement as HTMLElement | null;
+
+    if (
+      compactProgress >= COMPACT_FOCUS_THRESHOLD &&
+      headerInputRef.current &&
+      active === headerInputRef.current &&
+      !focusForcedOnceRef.current
+    ) {
+      // ne pas voler le focus au PAD si tu tapes dedans
+      if (padInputRef.current && active === padInputRef.current) return;
+
+      try { headerInputRef.current.blur(); } catch {}
+      try { compactInputRef.current?.focus?.({ preventScroll: true }); }
+      catch { compactInputRef.current?.focus?.(); }
+      focusForcedOnceRef.current = true;
+      return;
+    }
+    if (compactProgress < 0.2) {
+      focusForcedOnceRef.current = false;
+    }
+  }, [compactProgress]);
+
+  /* -------------------- Index de recherche en mémo ------------------- */
   const { lookup, shortKeys } = useMemo(
     () => buildLookup(initialChampions),
     [initialChampions]
   );
 
+  /* -------------------------- Progression --------------------------- */
   const found = revealed.size;
   const totalPlayable = initialChampions.length;
+  const progress = totalPlayable > 0 ? (found / totalPlayable) * 100 : 0;
 
-  // Timer
+  /* ----------------------------- Timer ------------------------------ */
   useEffect(() => {
     if (!paused) {
       timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [paused]);
-
-  const mm = String(Math.floor(elapsed / 60)).padStart(2, "0");
-  const ss = String(elapsed % 60).padStart(2, "0");
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+  const mm = String(minutes).padStart(2, "0");
+  const ss = String(seconds).padStart(2, "0");
 
   const togglePause = () => setPaused((p) => !p);
 
@@ -212,62 +269,55 @@ export default function ChampionsGame({ initialChampions }: Props) {
     setLastTry("");
     setLastResult("—");
     setRevealed(new Set());
-    inputRef.current?.focus();
+    setSelectedSlug(null);
+    setHintBySlug({});
+    setLoreBySlug({});
+    setLoreLoading({});
+    setLoreError({});
+    if (loreAbortRef.current) {
+      loreAbortRef.current.abort();
+      loreAbortRef.current = null;
+    }
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    headerInputRef.current?.focus({ preventScroll: true });
   };
 
-  /* 6) Tente de révéler :
-        - direct via lookup (noms, alias, tokens)
-        - sinon fuzzy avec seuil dépendant de la longueur de la **saisie**
-          * si saisie < 4 chars => seuil = 0 (AUCUNE faute tolérée)
-          * si saisie >= 4 => seuil = 1
-        - en fuzzy, on évite les **cibles** dont la clé est courte (2–3)
-          pour empêcher "v" => "vex", etc.
-  */
+  /* ---------------------------- Validation -------------------------- */
   const tryReveal = useCallback(
-    (raw: string) => {
+    (raw: string): boolean => {
+      let didReveal = false;
       const q = norm(raw.trim());
       setLastTry(raw.trim());
 
-      if (!q) {
-        setLastResult("⛔ Saisie vide");
-        return;
-      }
+      if (!q) { setLastResult("⛔ Saisie vide"); return didReveal; }
 
-      // 1) Direct match (noms + alias + tokens)
+      // 1) Direct
       const direct = lookup.get(q);
       if (direct) {
         if (!revealed.has(direct.slug)) {
+          didReveal = true;
           setRevealed((prev) => new Set(prev).add(direct.slug));
           setLastResult(`✅ ${direct.name} trouvé`);
         } else {
           setLastResult(`ℹ️ ${direct.name} était déjà révélé`);
         }
-        return;
+        return didReveal;
       }
 
-      // 2) Fuzzy (seuil selon la longueur de la **requête**)
+      // 2) Fuzzy
       const threshold = q.length >= 4 ? 1 : 0;
-      if (threshold === 0) {
-        setLastResult("❌ Aucun champion correspondant");
-        return;
-      }
+      if (threshold === 0) { setLastResult("❌ Aucun champion correspondant"); return didReveal; }
 
-      // 3) Recherche du meilleur candidat (éviter cibles à clé courte)
       let best: ChampionMeta | undefined;
       let bestD = Infinity;
-
       for (const [key, champ] of lookup) {
-        if (shortKeys.has(key)) continue; // évite faux positifs vers noms courts
+        if (shortKeys.has(key)) continue;
         const d = lev(q, key);
-        if (d < bestD) {
-          bestD = d;
-          best = champ;
-          if (d === 0) break;
-        }
+        if (d < bestD) { bestD = d; best = champ; if (d === 0) break; }
       }
-
       if (best && bestD <= threshold) {
         if (!revealed.has(best.slug)) {
+          didReveal = true;
           setRevealed((prev) => new Set(prev).add(best!.slug));
           setLastResult(`✅ ${best.name} (faute tolérée)`);
         } else {
@@ -276,89 +326,541 @@ export default function ChampionsGame({ initialChampions }: Props) {
       } else {
         setLastResult("❌ Aucun champion correspondant");
       }
+      return didReveal;
     },
     [lookup, revealed, shortKeys]
   );
 
-  const validate = () => {
+  // Valider depuis header/sticky (input global)
+  const validate = (from?: "header" | "compact") => {
     if (!value.trim()) return;
-    tryReveal(value);
-    setValue("");
-    inputRef.current?.focus();
-  };
-
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      validate();
+    if (tryReveal(value)) {
+      // si trouvé → focus sur l’input adapté (compact si visible, sinon header)
+      const wantCompact = from === "compact" || isCompactVisible;
+      const target = wantCompact ? compactInputRef.current : headerInputRef.current;
+      try { target?.focus?.({ preventScroll: true }); } catch { target?.focus?.(); }
+    } else {
+      // si pas trouvé → on reste focus sur le même input
+      if (from === "compact" || isCompactVisible) {
+        try { compactInputRef.current?.focus?.({ preventScroll: true }); }
+        catch { compactInputRef.current?.focus?.(); }
+      } else {
+        try { headerInputRef.current?.focus?.({ preventScroll: true }); }
+        catch { headerInputRef.current?.focus?.(); }
+      }
     }
+    setValue("");
   };
 
+  const onKeyDownHeader = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") { e.preventDefault(); validate("header"); }
+  };
+  const onKeyDownCompact = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") { e.preventDefault(); validate("compact"); }
+  };
+
+  /* -------------------------- Sélection carte ----------------------- */
+  const handleCardClick = (slug: string) => {
+    setSelectedSlug((curr) => (curr === slug ? null : slug));
+  };
+
+  const selectedChampion = useMemo(
+    () => initialChampions.find((c) => c.slug === selectedSlug) || null,
+    [selectedSlug, initialChampions]
+  );
+  const selectedIsRevealed = selectedSlug ? revealed.has(selectedSlug) : false;
+
+  // Focus PAD quand carte sélectionnée NON révélée
+  useEffect(() => {
+    if (selectedChampion && !revealed.has(selectedChampion.slug)) {
+      const id = requestAnimationFrame(() => {
+        try { padInputRef.current?.focus?.({ preventScroll: true }); }
+        catch { padInputRef.current?.focus?.(); }
+      });
+      return () => cancelAnimationFrame(id);
+    }
+  }, [selectedChampion, revealed]);
+
+  // ⚡️ Lore on-demand pour carte révélée
+  useEffect(() => {
+    if (!selectedChampion || !selectedIsRevealed) return;
+    const slug = selectedChampion.slug;
+    if (loreBySlug[slug]) return;
+
+    if (loreAbortRef.current) loreAbortRef.current.abort();
+    const controller = new AbortController();
+    loreAbortRef.current = controller;
+
+    setLoreLoading((m) => ({ ...m, [slug]: true }));
+    // 🛠️ remplace la destructuration (_ inutilisé) par delete
+    setLoreError((m) => {
+      const next = { ...m };
+      delete next[slug];
+      return next;
+    });
+
+    (async () => {
+      try {
+        const lore = await getChampionLoreFromCDN(selectedChampion.id, "fr_FR");
+        if (controller.signal.aborted) return;
+        if (lore && lore.trim().length > 0) {
+          setLoreBySlug((m) => ({ ...m, [slug]: lore }));
+        } else {
+          setLoreError((m) => ({ ...m, [slug]: "Lore indisponible." }));
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setLoreError((m) => ({ ...m, [slug]: "Erreur de chargement du lore." }));
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoreLoading((m) => ({ ...m, [slug]: false }));
+          loreAbortRef.current = null;
+        }
+      }
+    })();
+
+    return () => {
+      controller.abort();
+      loreAbortRef.current = null;
+    };
+  }, [selectedChampion, selectedIsRevealed, loreBySlug]);
+
+  // Indice (révèle une lettre) + re-focus PAD
+  const [padGuess, setPadGuess] = useState("");
+  const showOneMoreLetter = () => {
+    if (!selectedChampion) return;
+    const totalLetters = countLetters(selectedChampion.name);
+    setHintBySlug((prev) => {
+      const current = prev[selectedChampion.slug] ?? 0;
+      const next = Math.min(totalLetters, current + 1);
+      return { ...prev, [prev[selectedChampion.slug] ? selectedChampion.slug : selectedChampion.slug]: next };
+    });
+    setTimeout(() => {
+      try { padInputRef.current?.focus?.({ preventScroll: true }); }
+      catch { padInputRef.current?.focus?.(); }
+    }, 0);
+  };
+
+  const validateFromPad = () => {
+    if (!padGuess.trim()) {
+      try { padInputRef.current?.focus?.({ preventScroll: true }); }
+      catch { padInputRef.current?.focus?.(); }
+      return;
+    }
+    if (tryReveal(padGuess)) {
+      const target = isCompactVisible ? compactInputRef.current : headerInputRef.current;
+      try { target?.focus?.({ preventScroll: true }); } catch { target?.focus?.(); }
+    } else {
+      try { padInputRef.current?.focus?.({ preventScroll: true }); }
+      catch { padInputRef.current?.focus?.(); }
+    }
+    setPadGuess("");
+  };
+
+  /* ----------------------- Click-outside & Escape ------------------- */
+  useEffect(() => {
+    if (!selectedChampion) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const panel = panelRef.current;
+      const target = e.target as HTMLElement | null;
+      if (!panel || !target) return;
+      if (panel.contains(target)) return;
+      const isCardClick = !!target.closest("[data-champion-card]");
+      if (isCardClick) return;
+      setSelectedSlug(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setSelectedSlug(null); };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [selectedChampion]);
+
+  /* ----------------------- Victoire & overlay ----------------------- */
+  const hasWon = found >= totalPlayable && totalPlayable > 0;
+  useEffect(() => { if (hasWon) setPaused(true); }, [hasWon]);
+
+  /* ================================ UI =============================== */
   return (
-    <div className="space-y-6">
-      {/* Ligne d’infos */}
-      <div className="info-row">
-        <div /> {/* spacer */}
-        <div style={{ marginLeft: "auto", display: "flex", gap: ".5rem", alignItems: "center" }}>
-          <div className="badge">Trouvés : {found}/{totalPlayable}</div>
-          <div className="badge">⏱ {mm}:{ss}</div>
-          <button type="button" onClick={togglePause} title={paused ? "Reprendre" : "Mettre en pause"}>
-            {paused ? "Reprendre" : "Pause"}
-          </button>
-          <button type="button" onClick={resetAll} title="Réinitialiser tout">
-            Réinitialiser
-          </button>
+    <div className="space-y-6 overflow-x-hidden">
+      {/* ===== HEADER PLEIN (non-sticky) ===== */}
+      <div className="mx-auto max-w-6xl px-3 sm:px-4 pt-4">
+        <div className="rounded-2xl ring-1 ring-white/5 bg-black/10 backdrop-blur-sm px-3 sm:px-4 py-3">
+          {/* Progression */}
+          <div className="min-w-0">
+            <div className="w-full h-3 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-green-400 to-emerald-600 transition-all duration-500"
+                style={{ width: `${progress}%` }}
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={Math.round(progress)}
+                aria-label="Progression"
+              />
+            </div>
+            <div className="mt-1 text-[11px] sm:text-xs text-white/70 truncate">
+              Trouvés : <span className="font-mono [font-variant-numeric:tabular-nums]">{found}</span>/
+              <span className="font-mono [font-variant-numeric:tabular-nums]">{totalPlayable}</span>
+              {" — "}Objectif : <span className="font-mono [font-variant-numeric:tabular-nums]">{targetTotal}</span>
+            </div>
+          </div>
+
+          {/* Switch + Timer + Actions */}
+          <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="hidden sm:inline text-sm text-white/80">Mode :</span>
+              <button
+                type="button"
+                onClick={() => setEasyMode((v) => !v)}
+                className={`relative inline-flex h-7 w-14 sm:h-8 sm:w-16 items-center rounded-full border transition-colors duration-300 focus:outline-none
+                  ${easyMode ? "bg-green-500/90 border-green-400/80" : "bg-rose-500/90 border-rose-400/80"}
+                `}
+                role="switch"
+                aria-checked={easyMode}
+                aria-label="Activer le mode Facile"
+                title={`Facile : ${easyMode ? "Oui" : "Non"}`}
+              >
+                <span
+                  className={`absolute left-1 top-1 bg-white rounded-full shadow-md transform transition-transform duration-300
+                    h-5 w-5 sm:h-6 sm:w-6 ${easyMode ? "translate-x-7 sm:translate-x-8" : ""}
+                  `}
+                />
+                <span className="sr-only">Facile</span>
+              </button>
+              <span className={`text-xs sm:text-sm font-medium ${easyMode ? "text-green-300" : "text-rose-300"}`}>
+                {easyMode ? "Facile" : "Normal"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2 sm:gap-2 ml-auto shrink-0">
+              <div
+                className="rounded px-2 py-1 text-white/90 bg-white/10"
+                style={{ width: 84, textAlign: "center" }}
+              >
+                <span className="font-mono [font-variant-numeric:tabular-nums] text-xs sm:text-sm">⏱ {mm}:{ss}</span>
+              </div>
+
+              {/* largeur fixe pour éviter tout décalage */}
+              <button
+                type="button"
+                onClick={togglePause}
+                title={paused ? "Reprendre" : "Mettre en pause"}
+                className="w-[112px] px-2 sm:px-3 py-1.5 rounded-md bg-gray-700/70 hover:bg-gray-600/70 text-white text-xs sm:text-sm text-center"
+              >
+                {paused ? "Reprendre" : "Pause"}
+              </button>
+
+              <button
+                type="button"
+                onClick={resetAll}
+                title="Réinitialiser tout"
+                className="px-2 sm:px-3 py-1.5 rounded-md bg-rose-600 hover:bg-rose-500 text-white text-xs sm:text-sm"
+              >
+                Réinitialiser
+              </button>
+            </div>
+          </div>
+
+          {/* Règles + feedback */}
+          <div className="mt-3 text-xs sm:text-sm text-white/80 flex flex-wrap gap-x-3 justify-between" id="rulesHelp">
+            <span className="sm:hidden">Faute d&apos;orthographe tolérés</span>
+            <span className="hidden sm:inline">
+              Règles : Légères faute d&apos;orthographe tolérés • Accents / Espaces / Points / Apostrophes - ignorés •
+            </span>
+            <span className="shrink-0">Cartes : {totalPlayable} chargées</span>
+          </div>
+
+          <div className="mt-2 p-3 rounded-md border border-white/5 bg-white/5">
+            <div className="text-xs sm:text-sm text-white/80">Dernier essai :</div>
+            <div className="text-sm sm:text-base text-white truncate">{lastTry || "—"}</div>
+            <div className="mt-1 text-xs sm:text-sm">{lastResult}</div>
+          </div>
+
+          {/* Champ global + Valider */}
+          <div className="mt-3 flex items-stretch gap-2 sm:gap-3 min-w-0">
+            <label htmlFor="championName" className="sr-only">Nom du champion</label>
+            <input
+              id="championName"
+              ref={headerInputRef}
+              type="text"
+              autoComplete="off"
+              placeholder="Tape un nom ( ex: Baron Nashor , Rift Herald ... )"
+              className="w-full min-w-0 px-3 py-2 rounded-md border bg-black/20 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm sm:text-base
+                         ring-2 ring-indigo-400/60 shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onKeyDown={onKeyDownHeader}
+              aria-describedby="rulesHelp"
+            />
+            <button
+              type="button"
+              onClick={() => validate("header")}
+              className="px-3 sm:px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm sm:text-base shrink-0"
+            >
+              Valider
+            </button>
+          </div>
+        </div>
+
+        {/* SENTINEL */}
+        <div ref={headerEndRef} className="h-px" aria-hidden="true" />
+      </div>
+
+      {/* ===== BARRE COMPACTE FIXE (overlay) — apparition FLUIDE ===== */}
+      <div
+        className="fixed top-[max(0.5rem,env(safe-area-inset-top))] left-0 right-0 z-40 px-2 sm:px-4 transition-all duration-300 ease-out will-change-[transform,opacity]"
+        style={{
+          opacity: compactProgress,
+          transform: `translateY(${(-8 * (1 - compactProgress)).toFixed(2)}px)`,
+          pointerEvents: compactProgress > 0 ? "auto" : "none",
+        }}
+      >
+        <div className="mx-auto max-w-6xl">
+          <div
+            className="rounded-2xl ring-1 ring-white/10 shadow-lg"
+            style={{
+              backgroundColor: `rgba(0,0,0,${(0.80 * compactProgress).toFixed(3)})`,
+              backdropFilter: `blur(${(2 + 2 * compactProgress).toFixed(1)}px)`,
+              WebkitBackdropFilter: `blur(${(2 + 2 * compactProgress).toFixed(1)}px)`,
+            }}
+          >
+            <div className="px-3 sm:px-4 py-2">
+              {/* Progress mini */}
+              <div className="min-w-0">
+                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-green-400 to-emerald-600 transition-all duration-500"
+                    style={{ width: `${progress}%` }}
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(progress)}
+                    aria-label="Progression"
+                  />
+                </div>
+              </div>
+
+              {/* Switch + Timer */}
+              <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setEasyMode((v) => !v)}
+                    className={`relative inline-flex h-6 w-12 items-center rounded-full border transition-colors duration-300 focus:outline-none
+                      ${easyMode ? "bg-green-500/90 border-green-400/80" : "bg-rose-500/90 border-rose-400/80"}
+                    `}
+                    role="switch"
+                    aria-checked={easyMode}
+                    aria-label="Activer le mode Facile"
+                    title={`Facile : ${easyMode ? "Oui" : "Non"}`}
+                  >
+                    <span
+                      className={`absolute left-1 top-1 h-4 w-4 bg-white rounded-full shadow-md transform transition-transform duration-300
+                        ${easyMode ? "translate-x-6" : ""}
+                      `}
+                    />
+                    <span className="sr-only">Facile</span>
+                  </button>
+                  <span className={`text-xs font-medium ${easyMode ? "text-green-300" : "text-rose-300"}`} style={{ width: 48, textAlign: "center" }}>
+                    {easyMode ? "Facile" : "Normal"}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 ml-auto shrink-0">
+                  <div
+                    className="rounded px-2 py-1 text-white/90"
+                    style={{
+                      width: 70,
+                      textAlign: "center",
+                      backgroundColor: "rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <span className="font-mono [font-variant-numeric:tabular-nums] text-xs">⏱ {mm}:{ss}</span>
+                  </div>
+                  {/* largeur fixe */}
+                  <button
+                    type="button"
+                    onClick={togglePause}
+                    title={paused ? "Reprendre" : "Mettre en pause"}
+                    className="w-[44px] px-0 py-1 rounded-md bg-gray-700/70 hover:bg-gray-600/70 text-white text-xs text-center"
+                  >
+                    {paused ? "▶" : "⏸"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Dernier essai — compact */}
+              <div className="mt-2 rounded-md border border-white/10" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} aria-live="polite">
+                <div className="px-2 py-1.5">
+                  <div className="text-[11px] text-white/70">Dernier essai :</div>
+                  <div className="text-xs sm:text-sm text-white truncate" title={lastTry || "—"}>
+                    {lastTry || "—"}
+                  </div>
+                  <div className="mt-0.5 text-[11px] sm:text-xs">{lastResult}</div>
+                </div>
+              </div>
+
+              {/* Champ compact + Valider */}
+              <div className="mt-2 flex items-stretch gap-2 min-w-0">
+                <label htmlFor="championName-compact" className="sr-only">Nom du champion</label>
+                <input
+                  id="championName-compact"
+                  ref={compactInputRef}
+                  type="text"
+                  autoComplete="off"
+                  placeholder="Tape un nom ( ex: Baron Nashor , Rift Herald ... )"
+                  className="w-full min-w-0 rounded-md border bg-black/20 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 px-3 py-1.5 text-sm
+                             ring-2 ring-indigo-400/60 shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  onKeyDown={onKeyDownCompact}
+                />
+                <button
+                  type="button"
+                  onClick={() => validate("compact")}
+                  className="px-3 py-1.5 text-sm rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shrink-0"
+                >
+                  Valider
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Saisie */}
-      <div className="form-row" style={{ display: "flex", gap: ".75rem", alignItems: "center" }}>
-        <label htmlFor="championName" className="sr-only">Nom du champion</label>
-        <input
-          id="championName"
-          name="championName"
-          ref={inputRef}
-          type="text"
-          autoComplete="off"
-          placeholder="Tape un nom (ex: Nunu, Willump, Renata, Glasc, Jarvan...)"
-          className="w-full md:flex-1"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={onKeyDown}
-          aria-describedby="rulesHelp"
-        />
-        <button type="button" onClick={validate}>Valider</button>
-      </div>
-
-      {/* Règles + feedback */}
-      <div className="space-y-2">
-        <div id="rulesHelp" className="text-sm text-white/80 flex flex-wrap gap-x-3 justify-between">
-          <span>
-            Règles : 1 faute tolérée (≥ 4 lettres) • accents/espaces/apostrophes ignorés •
-          </span>
-          <span>Cartes : {totalPlayable} chargées</span>
-        </div>
-
-        <div className="panel p-3" style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: ".75rem" }}>
-          <div className="text-sm text-white/80">Dernier essai :</div>
-          <div className="text-base" style={{ color: "#fff" }}>{lastTry || "—"}</div>
-          <div className="mt-1 text-sm">{lastResult}</div>
+      {/* ===== GRILLE DES CARTES ===== */}
+      <div className="mx-auto max-w-6xl px-3 sm:px-4">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
+          {initialChampions.map((c) => (
+            <ChampionCard
+              key={c.slug}
+              champion={c}
+              isRevealed={revealed.has(c.slug)}
+              previewMode={easyMode ? "blur" : "none"}
+              isSelected={selectedSlug === c.slug}
+              onCardClick={handleCardClick}
+            />
+          ))}
         </div>
       </div>
 
-      {/* Grille des cartes */}
-      <div className="cards-grid">
-        {initialChampions.map((c) => (
-          <ChampionCard key={c.slug} champ={c} isRevealed={revealed.has(c.slug)} />
-        ))}
-      </div>
-
-      {/* Fin */}
-      {found >= totalPlayable && totalPlayable > 0 && (
-        <div className="panel p-4 text-center" style={{ background: "var(--panel)", border: "1px solid var(--border)", borderRadius: ".75rem" }}>
-          🎉 GG ! Tu as tout trouvé.
+      {/* 🟣 PANNEAU FLOTTANT (en bas d'écran) */}
+      {selectedChampion && (
+        <div
+          ref={panelRef}
+          className="fixed left-1/2 -translate-x-1/2 bottom-4 z-40 w-[min(760px,94vw)] rounded-2xl ring-1 ring-white/10 bg-black/70 backdrop-blur-md shadow-2xl px-3 sm:px-4 py-3"
+          role="dialog"
+          aria-label={selectedIsRevealed ? `Infos ${selectedChampion.name}` : `Saisir le nom pour ${selectedChampion.name}`}
+        >
+          {!selectedIsRevealed ? (
+            <>
+              <div className="text-xs sm:text-sm text-white/80 mb-1">
+                Carte sélectionnée : <span className="font-semibold">{selectedChampion.title}</span>
+              </div>
+              <div className="rounded-md border border-white/10 bg-white/5 px-2 py-1.5 mb-2 text-sm sm:text-base">
+                {revealName(selectedChampion.name, hintBySlug[selectedChampion.slug] ?? 0)}
+              </div>
+              <div className="flex items-stretch gap-2">
+                <label htmlFor="pad-guess" className="sr-only">Proposition</label>
+                <input
+                  id="pad-guess"
+                  ref={padInputRef}
+                  type="text"
+                  autoComplete="off"
+                  placeholder="Écris le nom ici…"
+                  className="w-full min-w-0 px-3 py-2 rounded-md border bg-black/30 text-white placeholder:text-white/50 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm
+                             ring-2 ring-indigo-400/60 shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
+                  value={padGuess}
+                  onChange={(e) => setPadGuess(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); validateFromPad(); } }}
+                />
+                <button
+                  type="button"
+                  onClick={showOneMoreLetter}
+                  className="px-3 py-2 rounded-md bg-amber-500/90 hover:bg-amber-400 text-black font-semibold text-sm shrink-0"
+                  title="Révéler une lettre"
+                >
+                  Indice
+                </button>
+                <button
+                  type="button"
+                  onClick={validateFromPad}
+                  className="px-3 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shrink-0"
+                >
+                  Valider
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="space-y-2">
+              <div className="text-sm sm:text-base font-semibold">
+                {selectedChampion.name} <span className="text-white/70">— {selectedChampion.title}</span>
+              </div>
+              <div className="text-xs sm:text-sm text-white/80 flex flex-wrap gap-x-3 gap-y-1">
+                <span><strong>Rôles :</strong> {selectedChampion.roles?.join(" • ") || "—"}</span>
+                {selectedChampion.partype && (<span><strong>Ressource :</strong> {selectedChampion.partype}</span>)}
+              </div>
+              <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs sm:text-sm text-white/90 whitespace-pre-line max-h-64 sm:max-h-72 overflow-y-auto">
+                {loreLoading[selectedChampion.slug] && !loreBySlug[selectedChampion.slug] ? (
+                  <span className="text-white/70">Chargement du lore…</span>
+                ) : loreError[selectedChampion.slug] ? (
+                  <span className="text-rose-300">{loreError[selectedChampion.slug]}</span>
+                ) : (
+                  (loreBySlug[selectedChampion.slug] || selectedChampion.lore || "Lore indisponible.")
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
+
+      {/* 🏁 OVERLAY DE FIN */}
+      <div
+        className={`fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 transition-opacity duration-200
+          ${found >= totalPlayable && totalPlayable > 0 ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
+        `}
+        aria-hidden={!(found >= totalPlayable && totalPlayable > 0)}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Fin de partie"
+      >
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+        <div className="relative w-full max-w-md rounded-2xl ring-1 ring-white/10 bg-gray-900 text-white shadow-2xl p-5 sm:p-6 text-center">
+          <div className="text-3xl sm:text-4xl">🎉</div>
+          <h2 className="mt-2 text-xl sm:text-2xl font-bold">Félicitations !</h2>
+          <p className="mt-2 text-sm sm:text-base text-white/90">
+            Tu as trouvé tous les{" "}
+            <span className="font-semibold">{totalPlayable}</span>{" "}
+            champions en{" "}
+            <span className="font-semibold">
+              {Math.floor(elapsed / 60)}min/{String(elapsed % 60).padStart(2, "0")}sec
+            </span>.
+          </p>
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={resetAll}
+              className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+            >
+              Rejouer
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ▲ Remonter — masqué sur mobile */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        className="hidden md:flex fixed bottom-6 right-6 w-12 h-12 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white items-center justify-center shadow-lg z-40"
+        title="Remonter en haut"
+        aria-label="Remonter en haut"
+      >
+        ▲
+      </button>
     </div>
   );
 }

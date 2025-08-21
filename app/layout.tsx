@@ -7,6 +7,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import Link from "next/link";
 // import Script from 'next/script'; // Décommente quand tu activeras AdSense
 
 const inter = Inter({ subsets: ['latin'] });
@@ -53,10 +54,10 @@ export default function RootLayout({
         {/* Header du site */}
         <header className="border-b border-white/10 bg-black/20 backdrop-blur">
           <div className="mx-auto max-w-7xl px-4 py-4 flex items-center justify-between">
-            <a href="/" className="text-xl font-semibold">LoL Quiz</a>
+            <Link href="/" className="text-xl font-semibold">LoL Quiz</Link >
             <nav className="text-sm opacity-80 hover:opacity-100 transition">
-              <a href="/" className="px-2">Accueil</a>
-              <a href="/a-propos" className="px-2">À propos</a>
+              <Link href="/" className="px-2">Accueil</Link >
+              <Link href="/a-propos" className="px-2">À propos</Link >
             </nav>
           </div>
         </header>

@@ -1,73 +1,109 @@
 // components/ChampionCard.tsx
-"use client";
+// ─────────────────────────────────────────────────────────────────────────────
+// Cartes carrées nettes : on passe à "squareHD" (champion-icons CDragon) avec fallback.
+// - Next/Image optimisé (quality=90 + placeholder blur).
+// - Non révélé (facile) : blur renforcé + désaturation + contraste ↓.
+// - Non révélé (normal) : dos de carte "?".
+// ─────────────────────────────────────────────────────────────────────────────
 
+import Image from "next/image";
 import type { ChampionMeta } from "@/lib/champions";
+import { getChampionPortraitUrl, DEFAULT_BLUR_DATA_URL } from "@/lib/championAssets";
 
 type Props = {
-  champ: ChampionMeta;
+  champion: ChampionMeta;
   isRevealed: boolean;
+  previewMode?: "none" | "blur";
+  isSelected?: boolean;
+  onCardClick?: (slug: string) => void;
 };
 
-export default function ChampionCard({ champ, isRevealed }: Props) {
-  const hasRoles = Array.isArray(champ.roles) && champ.roles.length > 0;
-  const resource = champ.partype || "";
+export default function ChampionCard({
+  champion,
+  isRevealed,
+  previewMode = "none",
+  isSelected = false,
+  onCardClick,
+}: Props) {
+  // 👉 Carré HD **fiable** (champion-icons). On passe la clé numérique.
+  const imgSrc =
+    getChampionPortraitUrl(champion.id, champion.imagePath, {
+      variant: "squareHD",
+      riotKey: champion.key, // clé numérique (ex: "266")
+    }) || champion.imagePath;
+
+  const handleCardClick = () => onCardClick?.(champion.slug);
+  const handleKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onCardClick?.(champion.slug);
+    }
+  };
 
   return (
-    <div className="flip-scene">
-      <div
-        className={`flip-card ${isRevealed ? "is-revealed" : ""}`}
-        data-champion-id={champ.id}
-      >
-        {/* Face avant : visible seulement si pas révélée */}
-        {!isRevealed && (
-          <div className="flip-face flip-front" aria-hidden={isRevealed}>
-            <div className="text-center px-2 select-none">
-              <div className="text-xs uppercase tracking-wide text-white/60">
-                Champion
-              </div>
-              <div className="text-sm">Écris son nom pour révéler</div>
+    <div
+      data-champion-card
+      data-slug={champion.slug}
+      role="button"
+      tabIndex={0}
+      onClick={handleCardClick}
+      onKeyDown={handleKeyDown}
+      className={`group relative block rounded-xl overflow-hidden
+        ring-1 ring-white/10 bg-black hover:ring-white/20 transition
+        ${isSelected ? "ring-2 ring-indigo-400 ring-offset-2 ring-offset-gray-900" : ""}
+      `}
+      aria-pressed={isSelected}
+      aria-label={isRevealed ? champion.name : "Carte cachée"}
+    >
+      {/* Conteneur carré */}
+      <div className="relative aspect-square select-none">
+        {/* Image HD carrée */}
+        <Image
+          src={imgSrc}
+          alt={champion.name}
+          fill
+          sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 22vw"
+          quality={90}
+          placeholder="blur"
+          blurDataURL={DEFAULT_BLUR_DATA_URL}
+          className={`transition-opacity object-contain
+            ${
+              isRevealed
+                ? "opacity-100"
+                : previewMode === "blur"
+                ? "grayscale blur-[6px] md:blur-[8px] opacity-90 saturate-[0.8] contrast-[0.85]"
+                : "opacity-0"
+            }
+          `}
+          priority={false}
+        />
+
+        {/* Dos de carte : visible uniquement si NON révélé ET mode normal */}
+        {!isRevealed && previewMode === "none" && (
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center">
+            <div className="h-20 w-20 md:h-24 md:w-24 rounded-full border-2 border-white/20 bg-black/40 shadow-inner flex items-center justify-center">
+              <span className="text-4xl md:text-5xl font-extrabold text-white/80 select-none">?</span>
             </div>
           </div>
         )}
 
-        {/* Face arrière : image + infos */}
-        <div className="flip-face flip-back">
-          {/* Image (ne flip pas) */}
-          <img
-            className={`no-flip art ${isRevealed ? "art-on" : ""}`}
-            src={champ.imagePath}
-            alt={`${champ.name} — ${champ.title}`}
-            loading="lazy"
-            decoding="async"
-            width={1024}
-            height={1280}
-            sizes="(min-width:1280px) 18vw, (min-width:768px) 23vw, (min-width:640px) 30vw, 45vw"
-          />
-
-          {/* Légende en bas */}
-          {isRevealed && (
-            <div className="flip-caption">
-              <div className="name">{champ.name}</div>
-              <div className="title">{champ.title}</div>
-
-              {(hasRoles || resource) && (
-                <div className="meta">
-                  {hasRoles &&
-                    champ.roles.map((r) => (
-                      <span className="pill" key={r} title={`Rôle : ${r}`}>
-                        {r}
-                      </span>
-                    ))}
-                  {resource && (
-                    <span className="pill" title={`Ressource : ${resource}`}>
-                      {resource}
-                    </span>
-                  )}
-                </div>
-              )}
+        {/* Bandeau d'infos (uniquement si révélée) */}
+        {isRevealed && (
+          <>
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+            <div className="absolute inset-x-0 bottom-0 p-2">
+              <div className="rounded-md bg-black/60 ring-1 ring-white/10 px-2 py-1.5">
+                <div className="text-sm font-semibold text-white">{champion.name}</div>
+                <div className="text-xs text-white/80">{champion.title}</div>
+                {champion.roles?.length > 0 && (
+                  <div className="mt-1 text-[11px] text-white/75">
+                    {champion.roles.join(" • ")}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
