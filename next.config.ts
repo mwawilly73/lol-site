@@ -1,35 +1,37 @@
 // next.config.ts
+// ─────────────────────────────────────────────────────────────────────────────
+// PROD : on autorise les scripts inline (unsafe-inline) pour éviter de bloquer
+//        les scripts d'hydratation générés par Next.js.
+// DEV  : aucun header de sécurité (HMR, React Refresh, etc.)
+// On whiteliste aussi les CDNs d’images/fetch (DDragon/CDragon).
+// ─────────────────────────────────────────────────────────────────────────────
+
 import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV !== "production";
 
-/**
- * Sources images autorisées en production (CSP).
- * ⚠️ Si tu ajoutes d’autres CDNs plus tard, mets-les aussi ici.
- */
-const IMG_SOURCES = [
-  "'self'",
-  "data:",
-  "blob:",
+// CDNs que l’on utilise pour images & fetch
+const IMG_CDNS = [
   "https://ddragon.leagueoflegends.com",
   "https://raw.communitydragon.org",
-  "https://static.u.gg",
+];
+const CONNECT_CDNS = [
+  "https://ddragon.leagueoflegends.com",
+  "https://raw.communitydragon.org",
 ];
 
-/**
- * En développement :
- *  - PAS de CSP pour laisser HMR/React Refresh/WS fonctionner.
- *
- * En production :
- *  - CSP stricte mais compatible avec nos images externes.
- */
+// ⚠️ En PROD, autorise les inline-scripts pour Next (sinon page blanche en start)
 const CSP_PROD = [
   "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'", // tu pourras retirer 'unsafe-inline' si tout est purifié
-  `img-src ${IMG_SOURCES.join(" ")}`, // 👈 aligne avec images.remotePatterns
+  // 👇 Fix principal : permet aux scripts inline de Next de s’exécuter
+  "script-src 'self' 'unsafe-inline'",
+  // Tailwind/inline styles
+  "style-src 'self' 'unsafe-inline'",
+  // Images locales + CDNs LoL
+  `img-src 'self' data: blob: ${IMG_CDNS.join(" ")}`,
   "font-src 'self' data:",
-  "connect-src 'self'",
+  // fetch vers DDragon/CDragon (lore, etc.)
+  `connect-src 'self' ${CONNECT_CDNS.join(" ")}`,
   "frame-src 'self'",
 ].join("; ");
 
@@ -45,52 +47,15 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
     unoptimized: false,
-    /**
-     * CDNs autorisés pour next/image
-     * - DDragon (portraits, passives, sorts)
-     * - CommunityDragon (assets alternatifs, raw)
-     * - U.GG (si un jour tu veux illustrer des builds/meta)
-     *
-     * Si tu ajoutes un domaine, pense à :
-     *  1) L’ajouter ici
-     *  2) L’ajouter dans IMG_SOURCES (CSP) ci-dessus
-     */
+    // Next/Image : autoriser nos 2 CDNs d’images
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "ddragon.leagueoflegends.com",
-        pathname: "/**",
-      },
-      {
-        protocol: "https",
-        hostname: "raw.communitydragon.org",
-        pathname: "/**",
-      },
-      {
-        protocol: "https",
-        hostname: "static.u.gg",
-        pathname: "/**",
-      },
-
-      // Exemple pour en ajouter un 4e plus tard :
-      // {
-      //   protocol: "https",
-      //   hostname: "opgg-static.akamaized.net",
-      //   pathname: "/**",
-      // },
+      { protocol: "https", hostname: "ddragon.leagueoflegends.com", pathname: "/**" },
+      { protocol: "https", hostname: "raw.communitydragon.org", pathname: "/**" },
     ],
   },
-
   async headers() {
-    // 👉 En DEV: aucun header sécurité (retourne un tableau vide)
-    if (isDev) return [];
-    // 👉 En PROD: applique les headers sécurité
-    return [
-      {
-        source: "/:path*",
-        headers: securityHeadersProd,
-      },
-    ];
+    if (isDev) return []; // DEV : pas de headers CSP
+    return [{ source: "/:path*", headers: securityHeadersProd }];
   },
 };
 
