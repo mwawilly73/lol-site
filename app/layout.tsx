@@ -1,13 +1,20 @@
 // app/layout.tsx
-// ─────────────────────────────────────────────────────────────────────────────
-// Layout racine : importe les styles globaux + styles de layout, et pose le header.
-// Pas d’inline script → compatible avec ta CSP actuelle.
-// ─────────────────────────────────────────────────────────────────────────────
+// ───────────────────────────────────────────────────────────────
+// Layout racine : ajoute un viewport qui désactive le double-tap zoom
+// et intègre le header. (Header non-sticky.)
+// ───────────────────────────────────────────────────────────────
 
-import type { Metadata } from "next";
-import "./globals.css";          // tes styles globaux EXISTANTS (on n’y touche pas)
-import "./styles/layout.css";    // petit fichier CSS “layout” (créé ci-dessous)
+import type { Metadata, Viewport } from "next";
+import "./globals.css";
+import "./styles/layout.css";
 import SiteHeader from "@/components/SiteHeader";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false, // ⛔️ désactive pinch/double-tap zoom (meilleure UX “jeu”, moins accessible)
+};
 
 export const metadata: Metadata = {
   title: {
