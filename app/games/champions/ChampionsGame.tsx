@@ -1,9 +1,11 @@
 // app/games/champions/ChampionsGame.tsx
 // ─────────────────────────────────────────────────────────────────────────────
-// MÀJ principale : sticky bar avec apparition FLUIDE (opacity + bg alpha + translate)
-// - compactProgress ∈ [0..1] -> interpolation (opacity / bg / translateY)
-// - plus aucun "saut" de transparence entre deux états.
-// Le reste : focus pad, dos de carte ?, pause largeur fixe, règles, victoire, etc.
+// Points clés :
+// - Sticky compact : fondu fluide (opacity = compactProgress).
+// - Images carrées HD (dans ChampionCard).
+// - Lore à la demande via Data Dragon.
+// - Auto-focus : quand le header n’est plus visible, on transfère le focus
+//   vers l’input sticky compact sans remonter la page.
 // ─────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -19,6 +21,7 @@ import {
 } from "react";
 import type { ChampionMeta } from "@/lib/champions";
 import ChampionCard from "@/components/ChampionCard";
+import { getChampionLoreFromCDN } from "@/lib/ddragon";
 
 /* ------------------------------ Utils ------------------------------ */
 function norm(s: string) {
@@ -155,15 +158,24 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
 
   const [easyMode, setEasyMode] = useState(false);
 
-  // Sticky : on passe d'un booléen à un PROGRÈS 0..1 pour transition lisse
+  // Sticky progress lisse
   const headerEndRef = useRef<HTMLDivElement | null>(null);
   const headerEndY = useRef(0);
   const [compactProgress, setCompactProgress] = useState(0); // 0..1
-  const isCompactVisible = compactProgress > 0.5; // sert aux choix de focus
-  
-  const FADE_RANGE_PX = 160; // distance sur laquelle on "fade" la sticky bar
+  const isCompactVisible = compactProgress > 0.5;
+  const FADE_RANGE_PX = 160;
 
   const panelRef = useRef<HTMLDivElement | null>(null);
+
+  // Lore à la demande (cache)
+  const [loreBySlug, setLoreBySlug] = useState<Record<string, string>>({});
+  const [loreLoading, setLoreLoading] = useState<Record<string, boolean>>({});
+  const [loreError, setLoreError] = useState<Record<string, string>>({});
+  const loreAbortRef = useRef<AbortController | null>(null);
+
+  // 🆕 Hystérésis & seuil pour auto-focus sticky
+  const COMPACT_FOCUS_THRESHOLD = 0.95; // quand sticky est vraiment “active”
+  const focusForcedOnceRef = useRef(false); // évite les re-focus en boucle
 
   /* ---------------------- Mesure + scroll (sticky) ------------------ */
   useLayoutEffect(() => {
@@ -172,7 +184,6 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
       if (!el) return;
       const rect = el.getBoundingClientRect();
       headerEndY.current = Math.floor(rect.top + window.scrollY);
-      // init progress selon la position initiale
       const y = Math.max(0, window.scrollY - headerEndY.current);
       const t = Math.min(1, y / FADE_RANGE_PX);
       setCompactProgress(t);
@@ -198,6 +209,44 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  /* 🆕 Auto-focus quand le header sort de l’écran
+     - Si l’input “fixe” (header) a le focus et que la sticky est pleinement visible,
+       on bascule le focus vers l’input sticky (compact) sans scroll.
+     - On ne vole PAS le focus si tu tapes dans le PAD (panneau bas).
+  */
+  const padInputRef = useRef<HTMLInputElement>(null); // (déclaré ici pour l’effet ci-dessous)
+  useEffect(() => {
+    const active = document.activeElement as HTMLElement | null;
+
+    // Si sticky est active et que le focus est sur le champ header → basculer vers compact
+    if (
+      compactProgress >= COMPACT_FOCUS_THRESHOLD &&
+      headerInputRef.current &&
+      active === headerInputRef.current &&
+      !focusForcedOnceRef.current // évite de refaire 50 fois si on reste en bas
+    ) {
+      // ne pas voler le focus au PAD si tu es en train de deviner une carte
+      if (padInputRef.current && active === padInputRef.current) return;
+
+      try {
+        // On blur d’abord pour éviter que le navigateur tente de “le garder visible”
+        headerInputRef.current.blur();
+      } catch {}
+      try {
+        compactInputRef.current?.focus?.({ preventScroll: true });
+      } catch {
+        compactInputRef.current?.focus?.();
+      }
+      focusForcedOnceRef.current = true;
+      return;
+    }
+
+    // Reset du drapeau quand on remonte suffisamment (re-autorise un futur transfert)
+    if (compactProgress < 0.2) {
+      focusForcedOnceRef.current = false;
+    }
+  }, [compactProgress]);
 
   /* -------------------- Index de recherche en mémo ------------------- */
   const { lookup, shortKeys } = useMemo(
@@ -234,6 +283,13 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     setRevealed(new Set());
     setSelectedSlug(null);
     setHintBySlug({});
+    setLoreBySlug({});
+    setLoreLoading({});
+    setLoreError({});
+    if (loreAbortRef.current) {
+      loreAbortRef.current.abort();
+      loreAbortRef.current = null;
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
     headerInputRef.current?.focus({ preventScroll: true });
   };
@@ -317,7 +373,6 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
   const selectedIsRevealed = selectedSlug ? revealed.has(selectedSlug) : false;
 
   // Focus PAD quand carte sélectionnée NON révélée
-  const padInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (selectedChampion && !revealed.has(selectedChampion.slug)) {
       const id = requestAnimationFrame(() => {
@@ -328,7 +383,48 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     }
   }, [selectedChampion, revealed]);
 
+  // ⚡️ Lore on-demand pour carte révélée
+  useEffect(() => {
+    if (!selectedChampion || !selectedIsRevealed) return;
+    const slug = selectedChampion.slug;
+    if (loreBySlug[slug]) return;
+
+    if (loreAbortRef.current) loreAbortRef.current.abort();
+    const controller = new AbortController();
+    loreAbortRef.current = controller;
+
+    setLoreLoading((m) => ({ ...m, [slug]: true }));
+    setLoreError((m) => { const { [slug]: _, ...rest } = m; return rest; });
+
+    (async () => {
+      try {
+        const lore = await getChampionLoreFromCDN(selectedChampion.id, "fr_FR");
+        if (controller.signal.aborted) return;
+        if (lore && lore.trim().length > 0) {
+          setLoreBySlug((m) => ({ ...m, [slug]: lore }));
+        } else {
+          setLoreError((m) => ({ ...m, [slug]: "Lore indisponible." }));
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          setLoreError((m) => ({ ...m, [slug]: "Erreur de chargement du lore." }));
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoreLoading((m) => ({ ...m, [slug]: false }));
+          loreAbortRef.current = null;
+        }
+      }
+    })();
+
+    return () => {
+      controller.abort();
+      loreAbortRef.current = null;
+    };
+  }, [selectedChampion, selectedIsRevealed, loreBySlug]);
+
   // Indice (révèle une lettre) + re-focus PAD
+  const [padGuess, setPadGuess] = useState("");
   const showOneMoreLetter = () => {
     if (!selectedChampion) return;
     const totalLetters = countLetters(selectedChampion.name);
@@ -343,8 +439,6 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     }, 0);
   };
 
-  // Saisie panneau (pad)
-  const [padGuess, setPadGuess] = useState("");
   const validateFromPad = () => {
     if (!padGuess.trim()) {
       try { padInputRef.current?.focus?.({ preventScroll: true }); }
@@ -355,11 +449,9 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     setPadGuess("");
 
     if (didReveal) {
-      // après réussite : focus input global (sticky si visible)
       const target = isCompactVisible ? compactInputRef.current : headerInputRef.current;
       try { target?.focus?.({ preventScroll: true }); } catch { target?.focus?.(); }
     } else {
-      // sinon re-focus pad pour enchaîner
       try { padInputRef.current?.focus?.({ preventScroll: true }); }
       catch { padInputRef.current?.focus?.(); }
     }
@@ -474,9 +566,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
 
           {/* Règles + feedback */}
           <div className="mt-3 text-xs sm:text-sm text-white/80 flex flex-wrap gap-x-3 justify-between" id="rulesHelp">
-            {/* Mobile : court */}
             <span className="sm:hidden">Faute d&apos;orthographe tolérés</span>
-            {/* Desktop : détaillé */}
             <span className="hidden sm:inline">
               Règles : Légères faute d&apos;orthographe tolérés • Accents / Espaces / Points / Apostrophes - ignorés •
             </span>
@@ -519,24 +609,22 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
         <div ref={headerEndRef} className="h-px" aria-hidden="true" />
       </div>
 
-      {/* ===== BARRE COMPACTE FIXE (overlay) — transition FLUIDE ===== */}
+      {/* ===== BARRE COMPACTE FIXE (overlay) — apparition FLUIDE ===== */}
       <div
         className="fixed top-[max(0.5rem,env(safe-area-inset-top))] left-0 right-0 z-40 px-2 sm:px-4 transition-all duration-300 ease-out will-change-[transform,opacity]"
         style={{
-          opacity: compactProgress,                                     // fondu
-          transform: `translateY(${(-8 * (1 - compactProgress)).toFixed(2)}px)`, // petit slide
-          pointerEvents: compactProgress > 0 ? "auto" : "none",          // cliquable seulement visible
+          opacity: compactProgress,
+          transform: `translateY(${(-8 * (1 - compactProgress)).toFixed(2)}px)`,
+          pointerEvents: compactProgress > 0 ? "auto" : "none",
         }}
       >
         <div className="mx-auto max-w-6xl">
           <div
             className="rounded-2xl ring-1 ring-white/10 shadow-lg"
             style={{
-              // fond plus opaque
               backgroundColor: `rgba(0,0,0,${(0.80 * compactProgress).toFixed(3)})`,
-              // flou léger et progressif
               backdropFilter: `blur(${(2 + 2 * compactProgress).toFixed(1)}px)`,
-              WebkitBackdropFilter: `blur(${(2 + 2 * compactProgress).toFixed(1)}px)`, // ✅ Safari
+              WebkitBackdropFilter: `blur(${(2 + 2 * compactProgress).toFixed(1)}px)`,
             }}
           >
             <div className="px-3 sm:px-4 py-2">
@@ -555,7 +643,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                 </div>
               </div>
 
-              {/* Switch + Timer (bouton fixe) */}
+              {/* Switch + Timer */}
               <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
                 <div className="flex items-center gap-2 shrink-0">
                   <button
@@ -659,7 +747,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
         </div>
       </div>
 
-      {/* 🟣 PANNEAU FLOTTANT */}
+      {/* 🟣 PANNEAU FLOTTANT (en bas d'écran) */}
       {selectedChampion && (
         <div
           ref={panelRef}
@@ -715,11 +803,15 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                 <span><strong>Rôles :</strong> {selectedChampion.roles?.join(" • ") || "—"}</span>
                 {selectedChampion.partype && (<span><strong>Ressource :</strong> {selectedChampion.partype}</span>)}
               </div>
-              {selectedChampion.lore && (
-                <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs sm:text-sm text-white/90 whitespace-pre-line max-h-64 sm:max-h-72 overflow-y-auto">
-                  {selectedChampion.lore}
-                </div>
-              )}
+              <div className="rounded-md border border-white/10 bg-white/5 p-3 text-xs sm:text-sm text-white/90 whitespace-pre-line max-h-64 sm:max-h-72 overflow-y-auto">
+                {loreLoading[selectedChampion.slug] && !loreBySlug[selectedChampion.slug] ? (
+                  <span className="text-white/70">Chargement du lore…</span>
+                ) : loreError[selectedChampion.slug] ? (
+                  <span className="text-rose-300">{loreError[selectedChampion.slug]}</span>
+                ) : (
+                  (loreBySlug[selectedChampion.slug] || selectedChampion.lore || "Lore indisponible.")
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -728,9 +820,9 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
       {/* 🏁 OVERLAY DE FIN */}
       <div
         className={`fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 transition-opacity duration-200
-          ${hasWon ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
+          ${found >= totalPlayable && totalPlayable > 0 ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
         `}
-        aria-hidden={!hasWon}
+        aria-hidden={!(found >= totalPlayable && totalPlayable > 0)}
         role="dialog"
         aria-modal="true"
         aria-label="Fin de partie"
@@ -744,7 +836,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
             <span className="font-semibold">{totalPlayable}</span>{" "}
             champions en{" "}
             <span className="font-semibold">
-              {minutes}min/{String(seconds).padStart(2, "0")}sec
+              {Math.floor(elapsed / 60)}min/{String(elapsed % 60).padStart(2, "0")}sec
             </span>.
           </p>
           <div className="mt-4">
