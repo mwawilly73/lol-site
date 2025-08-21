@@ -96,6 +96,13 @@ button:active{transform:translateY(1px)}
   transform: rotateY(180deg);
 }
 
+/* Perf cartes hors écran */
+.card-content-visibility {
+  content-visibility: auto;
+  /* taille intrinsèque approximative pour éviter le “saut” à l’apparition */
+  contain-intrinsic-size: 300px 375px; /* ~ ratio 4/5 de tes vignettes */
+}
+
 .flip-face{
   position: absolute;
   inset: 0;                          /* occupe toute la carte */

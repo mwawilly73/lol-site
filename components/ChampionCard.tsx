@@ -62,7 +62,12 @@ export default function ChampionCard({
           src={imgSrc}
           alt={champion.name}
           fill
-          sizes="(max-width: 640px) 45vw, (max-width: 1024px) 30vw, 22vw"
+          sizes="
+                  (max-width: 480px) 45vw,      /* ~2 colonnes sur mobile */
+                  (max-width: 768px) 30vw,      /* ~3 colonnes sur tablette */
+                  (max-width: 1280px) 22vw,     /* ~4 colonnes sur laptop */
+                  18vw                           /* grands écrans */
+                "
           quality={90}
           placeholder="blur"
           blurDataURL={DEFAULT_BLUR_DATA_URL}

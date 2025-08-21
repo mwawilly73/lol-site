@@ -1,37 +1,28 @@
 // next.config.ts
-// ─────────────────────────────────────────────────────────────────────────────
-// PROD : on autorise les scripts inline (unsafe-inline) pour éviter de bloquer
-//        les scripts d'hydratation générés par Next.js.
-// DEV  : aucun header de sécurité (HMR, React Refresh, etc.)
-// On whiteliste aussi les CDNs d’images/fetch (DDragon/CDragon).
-// ─────────────────────────────────────────────────────────────────────────────
-
 import type { NextConfig } from "next";
 
 const isDev = process.env.NODE_ENV !== "production";
 
-// CDNs que l’on utilise pour images & fetch
-const IMG_CDNS = [
-  "https://ddragon.leagueoflegends.com",
-  "https://raw.communitydragon.org",
-];
-const CONNECT_CDNS = [
-  "https://ddragon.leagueoflegends.com",
-  "https://raw.communitydragon.org",
-];
-
-// ⚠️ En PROD, autorise les inline-scripts pour Next (sinon page blanche en start)
+/**
+ * En DEV :
+ *  - PAS de CSP (0 header sécurité) pour laisser HMR/WebSocket fonctionner.
+ *
+ * En PROD :
+ *  - CSP stricte mais pragmatique :
+ *      • script-src inclut 'unsafe-inline' pour éviter les erreurs "Refused to execute inline script"
+ *        (sinon il faut mettre en place un système de nonce par requête).
+ *      • img-src et connect-src autorisent les 2 CDN qu’on utilise (DDragon & CommunityDragon).
+ */
 const CSP_PROD = [
   "default-src 'self'",
-  // 👇 Fix principal : permet aux scripts inline de Next de s’exécuter
+  // 👉 FIX ICI : on ajoute 'unsafe-inline' pour laisser passer les scripts inline nécessaires
   "script-src 'self' 'unsafe-inline'",
-  // Tailwind/inline styles
-  "style-src 'self' 'unsafe-inline'",
-  // Images locales + CDNs LoL
-  `img-src 'self' data: blob: ${IMG_CDNS.join(" ")}`,
+  "style-src 'self' 'unsafe-inline'", // déjà présent (utile si styles inline)
+  // 👉 images locales + data + nos CDN
+  "img-src 'self' data: blob: https://ddragon.leagueoflegends.com https://raw.communitydragon.org",
   "font-src 'self' data:",
-  // fetch vers DDragon/CDragon (lore, etc.)
-  `connect-src 'self' ${CONNECT_CDNS.join(" ")}`,
+  // 👉 preconnect/fetch côté client vers les mêmes domaines
+  "connect-src 'self' https://ddragon.leagueoflegends.com https://raw.communitydragon.org",
   "frame-src 'self'",
 ].join("; ");
 
@@ -47,15 +38,21 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   images: {
     unoptimized: false,
-    // Next/Image : autoriser nos 2 CDNs d’images
     remotePatterns: [
+      // DDragon (tuiles, splash, data…)
       { protocol: "https", hostname: "ddragon.leagueoflegends.com", pathname: "/**" },
+      // CommunityDragon (champion-tiles HQ)
       { protocol: "https", hostname: "raw.communitydragon.org", pathname: "/**" },
     ],
   },
   async headers() {
-    if (isDev) return []; // DEV : pas de headers CSP
-    return [{ source: "/:path*", headers: securityHeadersProd }];
+    if (isDev) return []; // en dev, aucun header de sécurité pour éviter les frictions
+    return [
+      {
+        source: "/:path*",
+        headers: securityHeadersProd,
+      },
+    ];
   },
 };
 
