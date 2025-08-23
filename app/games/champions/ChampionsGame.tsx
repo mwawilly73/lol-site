@@ -6,7 +6,8 @@
 // - Lore à la demande via Data Dragon.
 // - Auto-focus : quand le header n’est plus visible, on transfère le focus
 //   vers l’input sticky compact sans remonter la page.
-// - ⚙️ ESLint: plus de "unused vars" (didReveal/_).
+// - Overlay de fin : inert quand masqué + blur focus si nécessaire.
+// - ⚙️ ESLint/TS: pas de any/unused vars.
 // ─────────────────────────────────────────────────────────────────────────────
 
 "use client";
@@ -177,6 +178,9 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
   // 🆕 Hystérésis & seuil pour auto-focus sticky
   const COMPACT_FOCUS_THRESHOLD = 0.95; // quand sticky est vraiment “active”
   const focusForcedOnceRef = useRef(false); // évite les re-focus en boucle
+
+  // 🆕 Overlay de fin pour a11y (inert/blur)
+  const winOverlayRef = useRef<HTMLDivElement | null>(null);
 
   /* ---------------------- Mesure + scroll (sticky) ------------------ */
   useLayoutEffect(() => {
@@ -392,7 +396,6 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     loreAbortRef.current = controller;
 
     setLoreLoading((m) => ({ ...m, [slug]: true }));
-    // 🛠️ remplace la destructuration (_ inutilisé) par delete
     setLoreError((m) => {
       const next = { ...m };
       delete next[slug];
@@ -432,9 +435,8 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     if (!selectedChampion) return;
     const totalLetters = countLetters(selectedChampion.name);
     setHintBySlug((prev) => {
-      const current = prev[selectedChampion.slug] ?? 0;
-      const next = Math.min(totalLetters, current + 1);
-      return { ...prev, [prev[selectedChampion.slug] ? selectedChampion.slug : selectedChampion.slug]: next };
+      const next = Math.min(totalLetters, (prev[selectedChampion.slug] ?? 0) + 1);
+      return { ...prev, [selectedChampion.slug]: next };
     });
     setTimeout(() => {
       try { padInputRef.current?.focus?.({ preventScroll: true }); }
@@ -482,6 +484,18 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
   /* ----------------------- Victoire & overlay ----------------------- */
   const hasWon = found >= totalPlayable && totalPlayable > 0;
   useEffect(() => { if (hasWon) setPaused(true); }, [hasWon]);
+
+  // 🆕 Blur focus si l’overlay se masque alors qu’un élément dedans avait le focus
+  useEffect(() => {
+    const showWin = found >= totalPlayable && totalPlayable > 0;
+    if (showWin) return;
+    const el = winOverlayRef.current;
+    if (!el) return;
+    const active = document.activeElement as HTMLElement | null;
+    if (active && el.contains(active)) {
+      try { active.blur(); } catch {}
+    }
+  }, [found, totalPlayable]);
 
   /* ================================ UI =============================== */
   return (
@@ -576,6 +590,10 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
 
           <div className="mt-2 p-3 rounded-md border border-white/5 bg-white/5">
             <div className="text-xs sm:text-sm text-white/80">Dernier essai :</div>
+            {/* Accessibilité : annonce vocale du dernier essai / résultat */}
+            <div className="sr-only" role="status" aria-live="polite">
+              {lastTry ? `${lastTry}. ${lastResult}` : ""}
+            </div>
             <div className="text-sm sm:text-base text-white truncate">{lastTry || "—"}</div>
             <div className="mt-1 text-xs sm:text-sm">{lastResult}</div>
           </div>
@@ -696,6 +714,10 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
               {/* Dernier essai — compact */}
               <div className="mt-2 rounded-md border border-white/10" style={{ backgroundColor: "rgba(255,255,255,0.06)" }} aria-live="polite">
                 <div className="px-2 py-1.5">
+                  {/* Accessibilité : annonce vocale du dernier essai / résultat */}
+                  <div className="sr-only" role="status" aria-live="polite">
+                    {lastTry ? `${lastTry}. ${lastResult}` : ""}
+                  </div>
                   <div className="text-[11px] text-white/70">Dernier essai :</div>
                   <div className="text-xs sm:text-sm text-white truncate" title={lastTry || "—"}>
                     {lastTry || "—"}
@@ -818,39 +840,45 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
         </div>
       )}
 
-      {/* 🏁 OVERLAY DE FIN */}
-      <div
-        className={`fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 transition-opacity duration-200
-          ${found >= totalPlayable && totalPlayable > 0 ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
-        `}
-        aria-hidden={!(found >= totalPlayable && totalPlayable > 0)}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Fin de partie"
-      >
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-        <div className="relative w-full max-w-md rounded-2xl ring-1 ring-white/10 bg-gray-900 text-white shadow-2xl p-5 sm:p-6 text-center">
-          <div className="text-3xl sm:text-4xl">🎉</div>
-          <h2 className="mt-2 text-xl sm:text-2xl font-bold">Félicitations !</h2>
-          <p className="mt-2 text-sm sm:text-base text-white/90">
-            Tu as trouvé tous les{" "}
-            <span className="font-semibold">{totalPlayable}</span>{" "}
-            champions en{" "}
-            <span className="font-semibold">
-              {Math.floor(elapsed / 60)}min/{String(elapsed % 60).padStart(2, "0")}sec
-            </span>.
-          </p>
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={resetAll}
-              className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
-            >
-              Rejouer
-            </button>
+      {/* 🏁 OVERLAY DE FIN — inert quand masqué */}
+      {(() => {
+        const showWin = found >= totalPlayable && totalPlayable > 0;
+        return (
+          <div
+            ref={winOverlayRef}
+            className={`fixed inset-0 z-50 flex items-center justify-center px-3 sm:px-4 transition-opacity duration-200
+              ${showWin ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}
+            `}
+            {...(!showWin ? ({ inert: true, 'aria-hidden': true } as React.HTMLAttributes<HTMLDivElement>) : {})}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Fin de partie"
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div className="relative w-full max-w-md rounded-2xl ring-1 ring-white/10 bg-gray-900 text-white shadow-2xl p-5 sm:p-6 text-center">
+              <div className="text-3xl sm:text-4xl">🎉</div>
+              <h2 className="mt-2 text-xl sm:text-2xl font-bold">Félicitations !</h2>
+              <p className="mt-2 text-sm sm:text-base text-white/90">
+                Tu as trouvé tous les{" "}
+                <span className="font-semibold">{totalPlayable}</span>{" "}
+                champions en{" "}
+                <span className="font-semibold">
+                  {Math.floor(elapsed / 60)}min/{String(elapsed % 60).padStart(2, "0")}sec
+                </span>.
+              </p>
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={resetAll}
+                  className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-semibold"
+                >
+                  Rejouer
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        );
+      })()}
 
       {/* ▲ Remonter — masqué sur mobile */}
       <button

@@ -1,6 +1,6 @@
 /* app/globals.css
    Base sombre + utilitaires + flip 3D propre
-   (AUCUN bouton/overlay, version stable) */
+   (version stable adaptée à TON fichier, avec ajouts a11y/perf) */
 
 /* Tailwind v4+ (si tu l’utilises) */
 @import "tailwindcss";
@@ -64,6 +64,19 @@ button:active{transform:translateY(1px)}
 .badge.danger{border-color:rgba(255,107,107,.35);background:rgba(255,107,107,.12);color:#fecaca}
 .badge.success{border-color:rgba(74,222,128,.35);background:rgba(74,222,128,.12);color:#bbf7d0}
 
+/* (NOUVEAU) Boutons très contrastés pour labels/switch si besoin */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  gap:.5rem;border-radius:.65rem;padding:.55rem .9rem;
+  border:1px solid var(--border);
+}
+.btn-primary{background:#4338ca;color:#fff;border-color:#4f46e5}      /* indigo fort */
+.btn-primary:hover{background:#4f46e5}
+.btn-success{background:#059669;color:#fff;border-color:#10b981}      /* emerald fort */
+.btn-success:hover{background:#10b981}
+.btn-danger{background:#e11d48;color:#fff;border-color:#f43f5e}        /* rose/rouge fort */
+.btn-danger:hover{background:#f43f5e}
+
 /* Grille cartes (fallback si pas Tailwind) */
 .cards-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem}
 @media (min-width:640px){.cards-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -81,7 +94,7 @@ button:active{transform:translateY(1px)}
   width: 100%;
   aspect-ratio: 4 / 5;              /* hauteur stable sans padding hack */
   border-radius: .75rem;
-  overflow: hidden;                  /* rien ne déborde */
+  overflow: hidden;                 /* rien ne déborde */
   border: 1px solid var(--border);
   background: var(--panel-weak);
   box-shadow: var(--shadow-sm);
@@ -122,7 +135,7 @@ button:active{transform:translateY(1px)}
   z-index: 1;                        /* sous la face back quand révélée */
 }
 
-/* Arrière : PRÉ‑tournée à 180° pour que son contenu soit lisible après flip */
+/* Arrière : PRÉ-tournée à 180° pour que son contenu soit lisible après flip */
 .flip-back{
   position: absolute;
   inset: 0;
@@ -185,9 +198,43 @@ button:active{transform:translateY(1px)}
   background: rgba(255,255,255,.14);
 }
 
-
-
 /* Ligne d’infos/timer */
 .info-row{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;justify-content:space-between}
 .progress{height:10px;border-radius:9999px;border:1px solid var(--border);background:rgba(255,255,255,.08);overflow:hidden}
 .progress > .bar{height:100%;background:rgba(255,255,255,.5);transition:width .3s ease}
+
+/* ============================================================= */
+/*                 AJOUTS ACCESSIBILITÉ / UX                     */
+/* ============================================================= */
+
+/* (NOUVEAU) Skip link — à utiliser dans layout :
+   <a href="#main" class="skip-link">Aller au contenu principal</a> */
+.skip-link{
+  position:absolute;left:8px;top:8px;padding:10px 12px;
+  background:#111827;color:#fff;border-radius:10px;border:1px solid rgba(255,255,255,.15);
+  box-shadow:0 10px 30px rgba(0,0,0,.4);
+  transform:translateY(-200%);transition:transform .2s ease;
+  z-index:1000;
+}
+.skip-link:focus{transform:translateY(0);outline:none}
+
+/* (NOUVEAU) Focus visible contrasté (clavier) — boost a11y */
+:focus-visible{
+  outline:2px solid #818cf8; /* indigo-400 */
+  outline-offset:2px;
+}
+
+/* (NOUVEAU) Utilitaire sr-only (si jamais Tailwind n’est pas chargé avant) */
+.sr-only{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0
+}
+.not-sr-only{
+  position:static;width:auto;height:auto;padding:0;margin:0;overflow:visible;
+  clip:auto;white-space:normal
+}
+
+/* (NOUVEAU) Respect des préférences d’animation — améliore l’accessibilité */
+@media (prefers-reduced-motion: reduce){
+  *{animation:none !important;transition:none !important;scroll-behavior:auto !important}
+}

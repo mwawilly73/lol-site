@@ -4,6 +4,7 @@
 // - Next/Image optimisé (quality=90 + placeholder blur).
 // - Non révélé (facile) : blur renforcé + désaturation + contraste ↓.
 // - Non révélé (normal) : dos de carte "?".
+// - Accessibilité : carte cliquable, clavier (Enter/Espace), aria-pressed, aria-label.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import Image from "next/image";
@@ -25,13 +26,14 @@ export default function ChampionCard({
   isSelected = false,
   onCardClick,
 }: Props) {
-  // 👉 Carré HD **fiable** (champion-icons). On passe la clé numérique.
+  // 👉 Carré HD **fiable** (champion-icons). On passe la clé numérique (riotKey).
   const imgSrc =
     getChampionPortraitUrl(champion.id, champion.imagePath, {
       variant: "squareHD",
-      riotKey: champion.key, // clé numérique (ex: "266")
+      riotKey: champion.key, // ex: "266"
     }) || champion.imagePath;
 
+  // Click + clavier
   const handleCardClick = () => onCardClick?.(champion.slug);
   const handleKeyDown: React.KeyboardEventHandler<HTMLDivElement> = (e) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -42,6 +44,7 @@ export default function ChampionCard({
 
   return (
     <div
+      // Hook pour click-outside (utilisé par ChampionsGame)
       data-champion-card
       data-slug={champion.slug}
       role="button"
@@ -63,14 +66,15 @@ export default function ChampionCard({
           alt={champion.name}
           fill
           sizes="
-                  (max-width: 480px) 45vw,      /* ~2 colonnes sur mobile */
-                  (max-width: 768px) 30vw,      /* ~3 colonnes sur tablette */
-                  (max-width: 1280px) 22vw,     /* ~4 colonnes sur laptop */
-                  18vw                           /* grands écrans */
-                "
+            (max-width: 480px) 45vw,
+            (max-width: 768px) 30vw,
+            (max-width: 1280px) 22vw,
+            18vw
+          "
           quality={90}
           placeholder="blur"
           blurDataURL={DEFAULT_BLUR_DATA_URL}
+          loading="lazy"
           className={`transition-opacity object-contain
             ${
               isRevealed
@@ -80,7 +84,7 @@ export default function ChampionCard({
                 : "opacity-0"
             }
           `}
-          priority={false}
+          // priority={false} // (laisse Next gérer le lazy par défaut)
         />
 
         {/* Dos de carte : visible uniquement si NON révélé ET mode normal */}
@@ -101,9 +105,7 @@ export default function ChampionCard({
                 <div className="text-sm font-semibold text-white">{champion.name}</div>
                 <div className="text-xs text-white/80">{champion.title}</div>
                 {champion.roles?.length > 0 && (
-                  <div className="mt-1 text-[11px] text-white/75">
-                    {champion.roles.join(" • ")}
-                  </div>
+                  <div className="mt-1 text-[11px] text-white/75">{champion.roles.join(" • ")}</div>
                 )}
               </div>
             </div>

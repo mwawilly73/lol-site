@@ -1,95 +1,65 @@
 // lib/championAssets.ts
-// Utilitaires d'URL pour les assets Riot/CommunityDragon.
-// Objectif : fournir des portraits CARRÉS en haute définition, stables (pas de 404).
+// Utilitaires images/versions CDN (DDragon + CDragon) + blur placeholder.
 
-export const DDRAGON_VERSION = "15.16.1";
+export const DDRAGON_VERSION = "15.16.1"; // garde ta version synchronisée avec ddragon.ts
+
 const DDRAGON_BASE = "https://ddragon.leagueoflegends.com";
-const CDRAGON_BASE =
-  "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default";
+const CDRAGON_RAW = "https://raw.communitydragon.org/latest";
 
-export type PortraitVariant = "squareHD" | "tileHD" | "loading" | "splash" | "square";
+export type PortraitOptions = {
+  /**
+   * - "square"   → DDragon: /img/champion/<ID>.png (120x120 env.)
+   * - "squareHD" → CDragon: /champion-icons/<riotKey>.png (icône nette)
+   * - "splash"   → (si besoin plus tard)
+   */
+  variant?: "square" | "squareHD" | "splash";
+  /** Clé numérique Riot (ex: "266") — requise pour squareHD */
+  riotKey?: string;
+};
 
 /**
- * Retourne une URL d’image “portrait” pour un champion.
- *
- * Variants :
- * - squareHD : ✅ CommunityDragon "champion-icons/<key>.png" (carré ~480x480, fiable)
- * - tileHD   : CommunityDragon "champion-tiles/<key>/<skin>.jpg" (peut 404 sur qq IDs)
- * - loading  : DDragon /cdn/img/champion/loading/<ID>_<skin>.jpg (vertical net)
- * - splash   : DDragon /cdn/img/champion/splash/<ID>_<skin>.jpg (grand horizontal)
- * - square   : DDragon /cdn/<ver>/img/champion/<ID>.png (120x120, fallback)
- *
- * @param id        "Aatrox" (ID texte)
- * @param fallback  chemin local éventuel (ex: "/assets/champions/Aatrox.png")
- * @param opts
- *  - variant       portrait demandé (par défaut: "squareHD")
- *  - skinIndex     index du skin (par défaut 0)
- *  - riotKey       clé num. du champion ("266" pour Aatrox) — utile pour CDragon
+ * Retourne l’URL d’un portrait de champion en fonction de la variante.
+ * Fallback : essaye DDragon square si la variante HD n’est pas possible.
  */
 export function getChampionPortraitUrl(
   id: string,
-  fallback?: string,
-  opts?: { variant?: PortraitVariant; skinIndex?: number; riotKey?: string | number }
+  fallbackLocal?: string,
+  options: PortraitOptions = {}
 ): string {
-  const keyText = (id || "").trim();
-  const riotKey = String(opts?.riotKey ?? "").trim();
-  const skin = Number.isFinite(opts?.skinIndex) ? String(opts!.skinIndex) : "0";
-  const variant: PortraitVariant = opts?.variant ?? "squareHD";
+  const { variant = "squareHD", riotKey } = options;
+  const safeId = (id || "").trim();
 
-  // 1) Carré HD **stable** : champion-icons (PNG) — recommandé
-  if (variant === "squareHD") {
+  try {
+    // 1) Variante HD carrée (CDragon) — nécessite riotKey numérique
+    if (variant === "squareHD" && riotKey) {
+      return `${CDRAGON_RAW}/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/${encodeURIComponent(
+        riotKey
+      )}.png`;
+    }
+
+    // 2) Variante carrée classique (DDragon)
+    if (variant === "square") {
+      return `${DDRAGON_BASE}/cdn/${DDRAGON_VERSION}/img/champion/${encodeURIComponent(safeId)}.png`;
+    }
+
+    // 3) Fallback : si on a riotKey, tente tout de même l’HD
     if (riotKey) {
-      // ex : .../v1/champion-icons/266.png
-      return `${CDRAGON_BASE}/v1/champion-icons/${riotKey}.png`;
+      return `${CDRAGON_RAW}/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/${encodeURIComponent(
+        riotKey
+      )}.png`;
     }
-    // Pas de clé numérique → fallback DDragon square
-    if (keyText) {
-      return `${DDRAGON_BASE}/cdn/${DDRAGON_VERSION}/img/champion/${keyText}.png`;
-    }
-    return fallback || "";
-  }
 
-  // 2) Carré HD via "tiles" (attention: peut 404 sur certains IDs/skins)
-  if (variant === "tileHD") {
-    if (riotKey) {
-      // ex : .../v1/champion-tiles/266/0.jpg
-      return `${CDRAGON_BASE}/v1/champion-tiles/${riotKey}/${skin}.jpg`;
-    }
-    if (keyText) {
-      return `${DDRAGON_BASE}/cdn/${DDRAGON_VERSION}/img/champion/${keyText}.png`;
-    }
-    return fallback || "";
+    // 4) Repli final DDragon
+    return `${DDRAGON_BASE}/cdn/${DDRAGON_VERSION}/img/champion/${encodeURIComponent(safeId)}.png`;
+  } catch {
+    // 5) Ultime secours : local/public
+    return fallbackLocal || `/assets/champions/${safeId}.png`;
   }
-
-  // 3) Loading (vertical net)
-  if (variant === "loading" && keyText) {
-    return `${DDRAGON_BASE}/cdn/img/champion/loading/${keyText}_${skin}.jpg`;
-  }
-
-  // 4) Splash (énorme horizontal)
-  if (variant === "splash" && keyText) {
-    return `${DDRAGON_BASE}/cdn/img/champion/splash/${keyText}_${skin}.jpg`;
-  }
-
-  // 5) Square (120x120)
-  if (variant === "square" && keyText) {
-    return `${DDRAGON_BASE}/cdn/${DDRAGON_VERSION}/img/champion/${keyText}.png`;
-  }
-
-  return fallback || "";
 }
 
-/** Placeholder léger pour <Image placeholder="blur"> (évite le flash moche) */
+/**
+ * Placeholder blur très léger (SVG 24x24 gris foncé).
+ * Avantage: pas de btoa côté serveur, inline data-URL stable pour Next/Image.
+ */
 export const DEFAULT_BLUR_DATA_URL =
-  "data:image/svg+xml;utf8," +
-  encodeURIComponent(
-    `<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'>
-      <defs>
-        <linearGradient id='g' x1='0' y1='0' x2='1' y2='1'>
-          <stop offset='0' stop-color='black' stop-opacity='0.6'/>
-          <stop offset='1' stop-color='black' stop-opacity='0.2'/>
-        </linearGradient>
-      </defs>
-      <rect fill='url(#g)' width='100%' height='100%'></rect>
-    </svg>`
-  );
+  "data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Crect width='100%25' height='100%25' fill='%23111418'/%3E%3C/svg%3E";
