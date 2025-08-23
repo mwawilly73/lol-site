@@ -1,63 +1,34 @@
 # LoL Quiz
 
-Jeu web Next.js pour deviner les champions de **League of Legends**.  
-Modes **Facile/Normal**, **alias** et **légères fautes** tolérés, **timer**, **indice lettre par lettre**, **progression**, **cartes carrées HD**, **lore à la demande** (DDragon), **sticky compact** avec auto-focus, **accessibilité** et **CSP** soignées.
+Jeu et quiz autour des champions de League of Legends.  
+➡️ Page du jeu principale : `/games/champions`
 
-> Fan-made – non affilié à Riot Games.
+## 🚀 Pile technique
 
----
+- **Next.js 15** (app router)
+- **TypeScript**
+- **Tailwind** (classes utilitaires dans `globals.css`)
+- **next/image** optimisé (CDN Riot & CommunityDragon)
+- **ESLint** + règles Next/TS
 
-## ✨ Fonctionnalités
+## ✨ Fonctionnalités clés
 
-- **Cartes carrées HD** (CDragon “champion-icons”) avec **fallback DDragon**.
-- **Deux modes** :  
-  - **Normal** : dos de carte “?” (aucune image avant de trouver).  
-  - **Facile** : image **noir & blanc + blur**.
-- **Saisie tolérante** : accents/espaces/ponctuation ignorés, alias & erreurs fréquentes gérées.
-- **Indice** : révèle **une lettre** à la fois.
-- **Timer** (pause/reprendre), **progress bar**, **reset**.
-- **Sticky compact** fluide (fondu + blur), **auto-focus** quand on scrolle.
-- **Panneau de carte** (en bas) :  
-  - carte non trouvée → saisie + indice ;  
-  - carte trouvée → **nom, titre, rôles, ressource, lore** (fetch à la demande).
-- **Overlay de victoire** (timer stoppé).
-- **Accessibilité** : ARIA, inert/hidden, annonce du dernier essai, Échap, clic extérieur, taille des cibles.
-- **Perfs** : images responsives `sizes`, `next/image`, `preconnect` CDN, scroll via `requestAnimationFrame`, `content-visibility`, Lighthouse **100/100/100/100** (avec la config livrée).
+- **Jeu “Liste des champions”** :
+  - Saisie globale + version **compacte sticky** (apparition fluide).
+  - **Mode Facile/Normal**, **indices** lettre par lettre, **alias** tolérants.
+  - Cartes carrées HD, **infos** (nom/titre/rôles/ressource), **lore** on-demand.
+  - **Overlay de fin** (timer figé) + bouton **Rejouer**.
+  - **Accessibilité** : 100% Lighthouse (focus management, ARIA, landmarks).
 
----
+- **Images / Assets** :
+  - **Data Dragon** (JSON + passives/spells).
+  - **CommunityDragon** (icônes carrées HD).
+  - `next.config.ts` autorise les domaines externes (remotePatterns).
 
-## 🕹️ Règles de saisie & alias
-
-- Normalisation : **minuscules**, **accents/espaces/apostrophes/ponctuation supprimés**.
-- **Tokens** du nom utilisables (≥ 3 lettres) — ex. “Nunu & Willump” → `nunu`, `willump`.
-- **Jarvan IV** : `jarvan`, `jarvan4` → `Jarvan IV`.
-- **Master Yi** : `maitreyi` → `Master Yi`.
-- **Wukong** ↔ `monkeyking`.
-- **Fautes courantes** prises en charge (extraits) :
-  - Shyvana : `shivana`, `shyvanna`, …  
-  - Qiyana : `qiana`, `quiana`, `kiyana`, …  
-  - Taliyah : `talia`, `taliya`, `talya`, …  
-  - Tryndamere : `trindamer`, `trynda`, …  
-  - Xin Zhao : `xinzao`, `xinzaho`  
-  - Tahm Kench : `tahmken`, `tamkench`, …  
-  - Kassadin : `kasadin` ; Katarina : `katarena`…
-
-> Tolérance **fuzzy** (Levenshtein ≤ 1) **seulement si** la saisie fait **≥ 4 lettres**.  
-> Pour les clés très courtes (2–3), on **évite le fuzzy** pour ne pas matcher n’importe quoi.
-
----
-
-## 🧱 Stack
-
-- **Next.js 15 (App Router)**, TypeScript, React 18
-- **Tailwind CSS** (importé dans `app/globals.css`)
-- **next/image** optimisé
-- **CDN**:  
-  - CDragon (carrés HD fiables)  
-  - DDragon (fallback + lore, versionnée)
-- **CSP** stricte (pas de scripts inline), styles inline **minimaux** uniquement pour le **filet CssGuard**.
-
----
+- **Perf / DX** :
+  - `content-visibility`, blur placeholders, preconnect DNS.
+  - Scripts **pré-déploiement** avec Lighthouse local.
+  - **CssGuard** : avertit si `globals.css` ne se charge pas et propose de recharger.
 
 ## 📁 Structure
 
@@ -65,138 +36,71 @@ app/
 a-propos/
 games/
 champions/
-page.tsx # page SSR
-ChampionsGame.tsx # logique + UI (client)
-layout.tsx # layout global + <CssGuard/>
-globals.css # thème + utilitaires + flip 3D propres (+ grille)
+page.tsx
+ChampionsGame.tsx
+globals.css
+layout.tsx
 components/
-ChampionCard.tsx # carte carrée HD, bandeau infos, dos '?'
-SiteHeader.tsx # header + menu mobile accessible
-CssGuard.tsx # filet si le CSS ne charge pas (overlay + reload)
+ChampionCard.tsx
+SiteHeader.tsx
+CssGuard.tsx
 lib/
-champions.ts # parsing d’exports DDragon-like si besoin
-championAssets.ts # URLs CDragon/DDragon (+ DDRAGON_VERSION)
-ddragon.ts # fetch “lore” on-demand
-public/
-
-icônes SVG
-
-reports/
-lighthouse-*.html # audits (hors git)
+champions.ts
+championAssets.ts
+ddragon.ts
 scripts/
-predeploy.mjs # build + checks + Lighthouse
-kill-port.mjs # util port (Windows)
+predeploy.mjs
+kill-port.mjs
 
 
----
 
-## ⚙️ Configuration
+## 🔧 Scripts
 
-- **`next.config.ts`** → `images.remotePatterns` doit autoriser :
-  - `ddragon.leagueoflegends.com`
-  - `raw.communitydragon.org`
-- **`lib/championAssets.ts`** → `DDRAGON_VERSION` (à pinner ou mettre à jour)
-- **`app/layout.tsx`** → `metadataBase` (URL du site en prod), `preconnect/dns-prefetch` vers DDragon/CDragon.
+- Dev : `npm run dev`
+- Build prod : `npm run build`
+- Démarrer prod local : `npm run start` (par défaut port 3000)
+- **Prod rapide local** : `npm run prod:local` (build + start)
+- **Pré-déploiement complet** : `npm run predeploy` (vérifs + Lighthouse)
+- **Pré-déploiement rapide** : `npm run predeploy:fast`
+- Libérer le port (PowerShell/Windows) :  
+  `npm run stop:3000` • `npm run stop:3001`
 
-Aucune clé privée n’est requise (tout est public côté CDN).  
-Optionnel : `.env.local` avec `NEXT_PUBLIC_SITE_URL`.
+## 🌐 Données & CDN
 
----
+- **Champion JSON (DDragon)** :  
+  `https://ddragon.leagueoflegends.com/cdn/<VERSION>/data/fr_FR/champion/Aatrox.json`
+- **Images passives & sorts (DDragon)** :  
+  `.../cdn/<VERSION>/img/passive/<PassiveFile.png>`  
+  `.../cdn/<VERSION>/img/spell/<SpellFile.png>`
+- **Icônes carrées HD (CommunityDragon)** (via `championAssets.ts`).
 
-## 🚀 Lancer le projet
+> La version DDragon est centralisée dans `lib/championAssets.ts` (`DDRAGON_VERSION`).
 
-```bash
-# Install
-npm i
+## 🔒 Sécurité (CSP)
 
-# Dev (avec HMR)
-npm run dev
+- **Prod** : CSP stricte sans `unsafe-inline`.  
+- **Dev** : headers sécurité non appliqués (HMR, React Refresh).
 
-# Prod local (build + start)
-npm run prod:local
+## ♿ Accessibilité
 
-# Pré-déploiement complet + Lighthouse (rapports HTML dans /reports)
-npm run predeploy
+- Landmarks (`<main>`, `role="dialog"`), focus visible & géré (sticky).
+- Fermeture click-outside + Escape pour overlays.
+- **Lighthouse** : 100% Accessibilité.
 
-# Variante rapide sans Lighthouse (port 3001)
-npm run predeploy:fast
+## 🧪 Pré-déploiement
 
+1. `npm run predeploy` (ou `predeploy:fast`)  
+2. Rapports Lighthouse dans `./reports/` (git-ignorés)
+3. `npm run prod:local` pour un test manuel
 
-Ports bloqués ?
+## 🆘 Dépannage
 
-npm run stop:3000
-npm run stop:3001
+- **Port déjà utilisé** : `npm run stop:3000` (ou `stop:3001`) puis relancer.
+- **CSP bloque scripts/styles inline** : passer par des fichiers/props ou ajouter un **hash/nonce** si nécessaire.
+- **Images 403/404** : vérifier `DDRAGON_VERSION` et l’ID champion.
+- **CSS non chargé** : **CssGuard** affiche un toast + bouton *Recharger*.
 
-🔒 Sécurité / CSP
+## 📝 Licence & crédits
 
-Pas de scripts inline (évite XSS).
-
-style-src 'self' 'unsafe-inline' : autorise les styles inline du CssGuard (overlay si le CSS ne charge pas).
-
-Tu peux durcir plus tard (hash/nonce) si tu veux enlever 'unsafe-inline'.
-
-♿ Accessibilité
-
-Menu mobile : pas focusable quand masqué (hidden + inert).
-
-Panneaux : role="dialog", Échap ferme, clic extérieur ferme.
-
-Annonce du dernier essai (aria-live="polite").
-
-Focus management : auto-focus sticky compact quand le header sort de l’écran ; focus correct lors des validations/indices.
-
-⚡ Performance
-
-Images responsives (sizes soignés, quality=90, placeholder=blur).
-
-preconnect / dns-prefetch vers les CDN d’images.
-
-Scroll lissé (RAF + throttling), sticky “GPU-friendly”.
-
-content-visibility pour les cartes hors écran.
-
-Lighthouse : 100 / 100 / 100 / 100 avec la config actuelle.
-
-🛟 Dépannage
-
-CSS non chargé (page “brute”) :
-→ Overlay CssGuard s’affiche avec un bouton Recharger.
-Vérifie app/globals.css importé dans app/layout.tsx.
-En dev: CTRL+F5, regarde la console, vérifie la CSP.
-
-CSP “Refused to execute inline script” :
-→ Pas de scripts inline dans l’app (OK). Garde la politique actuelle.
-
-EADDRINUSE: 3000 :
-→ npm run stop:3000 puis relance. Idem 3001.
-
-Images 403/404 :
-→ Vérifie next.config.ts (remotePatterns) et l’ID/slug/version DDragon.
-
-🧪 Qualité / Lint
-
-ESLint (Next + TS) sans any inutiles ni “unused vars”.
-
-npm run predeploy lance build + checks + Lighthouse.
-
-🤝 Contrib / Git
-
-Branches feat/*, fix/*, chore/*, docs/*.
-
-Commits Conventional :
-
-feat(game): mode facile/normal, cartes HD, alias…
-
-fix(a11y): aria-hidden + inert menu mobile
-
-docs(readme): sections stack & dépannage
-
-PR, review, merge → main.
-
-🗺️ Roadmap (idées)
-
-Filtres (rôle/ressource/lane), stats de fin détaillées.
-
-PWA/offline léger (optionnel).
-
-Autres jeux (items, sorts, splash quiz…).
+- Fan-made, non affilié à Riot.  
+- Données & assets via **Riot Data Dragon** et **CommunityDragon**.
