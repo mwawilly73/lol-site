@@ -6,7 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "next lint",
+
+    "predeploy": "node scripts/predeploy.mjs --reserve-3000",
+    "predeploy:fast": "node scripts/predeploy.mjs --reserve-3000 --no-lighthouse",
+    "audit:lh": "node scripts/predeploy.mjs --lighthouse-only --reserve-3000",
+
+    "prod:local": "npm run stop:3000 && npm run build && npm run start",
+
+    "stop:port": "node scripts/kill-port.mjs",
+    "stop:3000": "node scripts/kill-port.mjs 3000",
+    "stop:3001": "node scripts/kill-port.mjs 3001"
   },
   "dependencies": {
     "next": "15.4.7",
@@ -20,8 +31,10 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.21",
+    "chrome-launcher": "^1.2.0",
     "eslint": "^9",
     "eslint-config-next": "15.4.7",
+    "lighthouse": "^12.8.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.12",
     "typescript": "^5"
