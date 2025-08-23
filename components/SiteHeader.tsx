@@ -1,19 +1,46 @@
 // components/SiteHeader.tsx
 // Header + navigation responsive avec menu mobile accessible.
-// - Ferme au clic sur le backdrop.
+// - Ferme au clic sur le backdrop et à Échap.
 // - Focus management : ouverture → focus 1er lien ; fermeture → focus burger.
-// - Quand le panneau est FERMÉ → hidden + inert (pas focusable pour A11y).
-// - Zéro "any".
+// - Quand le panneau est FERMÉ → hidden + inert (empêche le focus).
+// - Pas d'opacity sur le header (fond opaque), pas de "any".
 
 "use client";
 
-import { useEffect, useRef, useState, type Ref } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+function NavLink({
+  href,
+  children,
+  forwardedRef,
+  onSelect,
+}: {
+  href: string;
+  children: React.ReactNode;
+  forwardedRef?: React.Ref<HTMLAnchorElement>;
+  onSelect?: () => void;
+}) {
+  const pathname = usePathname();
+  const active = pathname === href;
+  return (
+    <Link
+      ref={forwardedRef}
+      href={href}
+      className={`block rounded-lg px-4 py-2 text-sm md:text-base transition-colors
+        ${active ? "bg-white/15 text-white" : "text-white/90 hover:text-white hover:bg-white/10"}
+      `}
+      aria-current={active ? "page" : undefined}
+      onClick={onSelect}
+    >
+      {children}
+    </Link>
+  );
+}
+
 export default function SiteHeader() {
   const [open, setOpen] = useState(false);
-  const pathname = usePathname();
 
   const burgerRef = useRef<HTMLButtonElement | null>(null);
   const firstLinkRef = useRef<HTMLAnchorElement | null>(null);
@@ -31,47 +58,46 @@ export default function SiteHeader() {
     };
   }, [open]);
 
-  // Blur du focus si on ferme alors qu’un élément du panel avait le focus
+  // Applique/retire l'attribut inert au panneau quand fermé (évite TypeScript sur JSX)
+  useEffect(() => {
+    const panel = mobilePanelRef.current;
+    if (!panel) return;
+    if (!open) {
+      panel.setAttribute("inert", "");
+      panel.setAttribute("aria-hidden", "true");
+    } else {
+      panel.removeAttribute("inert");
+      panel.removeAttribute("aria-hidden");
+    }
+  }, [open]);
+
+  // Si on ferme alors qu’un élément du panel avait le focus → blur + retour focus burger
   useEffect(() => {
     if (open) return;
     const panel = mobilePanelRef.current;
     if (!panel) return;
     const active = document.activeElement as HTMLElement | null;
     if (active && panel.contains(active)) {
-      try { active.blur(); } catch {}
-      // Retour focus sur le burger
+      try {
+        active.blur();
+      } catch {}
       window.setTimeout(() => burgerRef.current?.focus(), 0);
     }
   }, [open]);
 
-  function NavLink({
-    href,
-    children,
-    forwardedRef,
-  }: {
-    href: string;
-    children: React.ReactNode;
-    forwardedRef?: Ref<HTMLAnchorElement>;
-  }) {
-    const active = pathname === href;
-    return (
-      <Link
-        ref={forwardedRef}
-        href={href}
-        className={`block rounded-lg px-4 py-2 text-sm md:text-base transition-colors
-          ${active ? "bg-white/15 text-white" : "text-white/90 hover:text-white hover:bg-white/10"}
-        `}
-        aria-current={active ? "page" : undefined}
-        onClick={() => setOpen(false)} // ferme depuis le menu mobile
-      >
-        {children}
-      </Link>
-    );
-  }
+  // Échap pour fermer
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open]);
 
   return (
-    <header className="mx-auto max-w-6xl px-3 sm:px-4 py-3 md:py-4">
-      <div className="flex items-center justify-between">
+    <header className="w-full border-b border-white/10 bg-[#0e1117]">
+      <div className="mx-auto max-w-6xl px-3 sm:px-4 py-3 md:py-4 flex items-center justify-between">
         {/* Logo / Titre du site */}
         <Link href="/" className="text-white font-semibold tracking-wide">
           LoL Quiz
@@ -102,8 +128,7 @@ export default function SiteHeader() {
       <div
         id="mobile-menu-panel"
         ref={mobilePanelRef}
-        hidden={!open}                 // retiré du flux si fermé
-        {...(!open ? ({ inert: true, 'aria-hidden': true } as React.HTMLAttributes<HTMLDivElement>) : {})} // 👈 empêche le focus quand fermé
+        hidden={!open}
         className="md:hidden fixed inset-0 z-50"
         role="dialog"
         aria-modal="true"
@@ -116,7 +141,7 @@ export default function SiteHeader() {
         />
 
         {/* Drawer (panneau) */}
-        <div className="absolute left-0 right-0 top-0 mx-2 mt-16 rounded-2xl ring-1 ring-white/10 bg-[#12141a]/95 shadow-2xl overflow-hidden">
+        <div className="absolute left-0 right-0 top-0 mx-2 mt-16 rounded-2xl ring-1 ring-white/10 bg-[#0e1117] shadow-2xl overflow-hidden">
           <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
             <div className="font-medium">Menu</div>
             <button
@@ -130,12 +155,15 @@ export default function SiteHeader() {
           </div>
 
           <nav aria-label="Navigation mobile" className="p-2">
-            {/* 1er lien focusable à l’ouverture */}
-            <NavLink href="/" forwardedRef={firstLinkRef}>
+            <NavLink href="/" forwardedRef={firstLinkRef} onSelect={() => setOpen(false)}>
               Accueil
             </NavLink>
-            <NavLink href="/games/champions">Jeu : Champions</NavLink>
-            <NavLink href="/a-propos">À propos</NavLink>
+            <NavLink href="/games/champions" onSelect={() => setOpen(false)}>
+              Jeu : Champions
+            </NavLink>
+            <NavLink href="/a-propos" onSelect={() => setOpen(false)}>
+              À propos
+            </NavLink>
           </nav>
         </div>
       </div>
