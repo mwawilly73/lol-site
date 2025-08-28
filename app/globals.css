@@ -31,7 +31,7 @@ body{background:var(--bg);color:var(--fg)}
 /* === Site-wide background (fixe, sombre, LoL) ===================== */
 :root{
   /* Change l’URL si tu veux une autre image */
-  --site-bg-url: url("https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Thresh_0.jpg");
+  --site-bg-url: url("/bg/bilgewaterBackground01ia.png");
 }
 
 /* Important: crée un contexte pour superposer le ::before proprement */
