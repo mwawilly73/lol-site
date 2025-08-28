@@ -1,11 +1,12 @@
 // components/SiteFooter.tsx
-// Footer compact, fond plein (comme le header), responsive, SEO/A11y friendly.
-// Le fond du site n’empiète pas (isolate + bg plein + z-index).
+// Footer minimal, fond plein, responsive, SEO/A11y-friendly.
 
 import Link from "next/link";
+import { CookieManageButton } from "@/components/CookieNotice";
 
 export default function SiteFooter() {
   const year = new Date().getFullYear();
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
 
   return (
     <footer
@@ -14,66 +15,48 @@ export default function SiteFooter() {
       role="contentinfo"
       className="relative isolate mt-10 text-xs sm:text-sm"
     >
-      {/* filet haut */}
-      <div
-        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent"
-        aria-hidden="true"
-      />
-      {/* bloc fond plein : empêche toute “transparence” de l’image de fond globale */}
-      <div className="relative z-10 bg-[#0e1117]">
-        <div className="mx-auto max-w-6xl px-3 sm:px-4 py-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
-            {/* Identité */}
-            <section itemScope itemType="https://schema.org/Organization">
-              <div className="font-semibold text-white">LoL Quiz</div>
-              <p className="mt-1 text-white/70">
-                Mini-jeux & quiz non officiels autour des champions de League of Legends.
-              </p>
-              {/* micro-données */}
+      <div className="relative z-10 bg-[#0e1117] border-t border-white/10">
+        <div className="mx-auto max-w-6xl px-3 sm:px-4 py-4">
+          <div className="flex flex-col gap-3 md:gap-0 md:flex-row md:items-center md:justify-between">
+            {/* Bloc gauche (identité + court texte) */}
+            <div itemScope itemType="https://schema.org/Organization" className="text-white/80">
+              <span className="font-semibold text-white">LoL Quiz</span>
+              <span className="mx-2 hidden md:inline">•</span>
+              <span className="block md:inline">
+                Fan-site non affilié à Riot Games.
+              </span>
               <meta itemProp="name" content="LoL Quiz" />
-              <meta itemProp="url" content="https://lol-quiz.example.com" />
-            </section>
+              <meta itemProp="url" content={siteUrl} />
+            </div>
 
-            {/* Navigation de pied */}
+            {/* Liens (wrap sur mobile) */}
             <nav
               aria-label="Liens de pied de page"
               itemScope
               itemType="https://schema.org/SiteNavigationElement"
-              className="flex flex-wrap items-center gap-x-4 gap-y-2"
+              className="flex flex-wrap items-center gap-x-4 gap-y-2 text-white/75"
             >
-              <Link className="hover:text-white transition-colors" href="/" itemProp="url">
-                <span itemProp="name">Accueil</span>
-              </Link>
-              <Link className="hover:text-white transition-colors" href="/games/champions" itemProp="url">
-                <span itemProp="name">Jeu : Champions</span>
-              </Link>
-              <Link className="hover:text-white transition-colors" href="/a-propos" itemProp="url">
-                <span itemProp="name">À propos</span>
-              </Link>
+              <Link href="/" className="hover:text-white transition">Accueil</Link>
+              <Link href="/games/champions" className="hover:text-white transition">Jeu : Champions</Link>
+              <Link href="/a-propos" className="hover:text-white transition">À propos</Link>
+              <Link href="/legal/mentions-legales" className="hover:text-white transition">Mentions légales</Link>
+              <Link href="/legal/confidentialite" className="hover:text-white transition">Confidentialité</Link>
+              <Link href="/cookies" className="hover:text-white transition">Cookies</Link>
               <a
-                className="hover:text-white transition-colors"
                 href="https://www.riotgames.com/en/legal"
                 target="_blank"
                 rel="noopener nofollow"
+                className="hover:text-white transition"
               >
                 Mentions Riot
               </a>
+              {/* Gestion des cookies (optionnel si tu utilises CookieNotice) */}
+              <CookieManageButton />
             </nav>
 
-            {/* Légal / info SEO */}
-            <section className="text-white/70">
-              <p>
-                Projet fan-made non affilié à Riot Games. League of Legends et Riot Games
-                sont des marques de Riot Games, Inc.
-              </p>
-            </section>
-          </div>
-
-          {/* Bas de pied */}
-          <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-white/60">
-            <div>© {year} LoL Quiz. Tous droits réservés.</div>
-            <div className="text-center sm:text-right">
-              <span className="hidden sm:inline">Fait avec ❤️ pour la commu.</span>
+            {/* Copyright */}
+            <div className="text-white/60">
+              © {year} LoL Quiz
             </div>
           </div>
         </div>
