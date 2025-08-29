@@ -1,58 +1,55 @@
 // app/cookies/page.tsx
 import type { Metadata } from "next";
-import { CookieManageButton } from "@/components/CookieNotice";
 import Link from "next/link";
+// ⬇️ Import direct (CookiePrefs est un Client Component avec "use client")
+import CookiePrefs from "@/components/CookiePrefs";
 
 export const metadata: Metadata = {
   title: "Cookies | LoL Quiz",
   description:
-    "Gérez vos préférences de cookies : nécessaires, mesure d’audience et publicité personnalisée.",
+    "Gérez vos préférences de cookies : fonctionnalités essentielles, mesure d’audience et publicité personnalisée.",
   alternates: { canonical: "/cookies" },
   openGraph: {
     title: "Cookies | LoL Quiz",
     description:
-      "Gérez vos préférences de cookies : nécessaires, mesure d’audience et publicité personnalisée.",
+      "Gérez vos préférences de cookies : fonctionnalités essentielles, mesure d’audience et publicité personnalisée.",
     url: "/cookies",
-    type: "article",
+    type: "website",
   },
 };
 
 export default function CookiesPage() {
   return (
-    <section className="container-lg space-y-6">
+    <section className="mx-auto max-w-6xl px-3 sm:px-4 py-6 space-y-6">
       <header className="space-y-2">
-        <h1 className="text-2xl md:text-3xl font-bold">Cookies</h1>
+        <h1 className="text-2xl md:text-3xl font-bold">Préférences de cookies</h1>
         <p className="text-white/80">
-          Vous pouvez revoir et modifier vos préférences de cookies à tout moment.
+          Ici, vous pouvez choisir si vous autorisez la{" "}
+          <strong>publicité personnalisée</strong>.
+          Sans consentement, des publicités <em>non personnalisées</em> peuvent s’afficher.
+        </p>
+        <p className="text-white/70 text-sm">
+          Pour en savoir plus sur le traitement des données, consultez la{" "}
+          <Link href="/legal/confidentialite" className="underline underline-offset-2">
+            page Confidentialité
+          </Link>
+          .
         </p>
       </header>
 
-      <article className="space-y-5 text-sm text-white/90">
-        <section className="space-y-1">
-          <h2 className="text-lg font-semibold text-white">Catégories</h2>
-          <ul className="list-disc pl-5 space-y-1">
-            <li>
-              <strong>Nécessaires</strong> — indispensables au bon fonctionnement du site (toujours actifs).
-            </li>
-            <li>
-              <strong>Mesure d’audience</strong> — statistiques anonymes pour améliorer le site (opt-in).
-            </li>
-            <li>
-              <strong>Publicité personnalisée</strong> — personnalisation des annonces (profilage, opt-in).
-              Sans consentement, des publicités <em>non personnalisées</em> peuvent être affichées.
-            </li>
-          </ul>
-        </section>
+      {/* Panneau de préférences (client) */}
+      <CookiePrefs />
 
-        <section className="space-y-2">
-          <h2 className="text-lg font-semibold text-white">Modifier mes préférences</h2>
-          <p>Rouvrez le bandeau pour personnaliser votre consentement :</p>
-          <CookieManageButton className="mt-1" label="Personnaliser les cookies" />
-          <p className="text-white/70">
-            Voir aussi notre <Link href="/legal/confidentialite" className="underline underline-offset-2">Politique de confidentialité</Link>.
-          </p>
-        </section>
-      </article>
+      <div className="rounded-lg border border-white/10 bg-black/40 p-4 text-sm text-white/80">
+        <p className="mb-2">
+          <strong>Rappel :</strong> les cookies strictement nécessaires au fonctionnement du site
+          sont toujours actifs et ne nécessitent pas de consentement.
+        </p>
+        <p>
+          Vous pouvez aussi rouvrir le bandeau depuis cette page si besoin (bouton “Ouvrir le
+          bandeau”), afin d’ajuster vos choix à tout moment.
+        </p>
+      </div>
     </section>
   );
 }

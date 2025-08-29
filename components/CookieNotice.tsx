@@ -3,38 +3,15 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import {
+  loadConsent,
+  saveConsent,
+  openConsentBanner,
+  subscribeConsent,
+  type Consent,
+} from "@/lib/consent";
 
-type Consent = {
-  necessary: true;      // toujours actif
-  analytics: boolean;   // mesure d’audience anonyme
-  ads: boolean;         // publicité personnalisée (opt-in)
-};
-
-const LS_KEY = "cookie-consent-v2";
-const OPEN_EVT = "cookie:open";
-const CHANGE_EVT = "cookie:change";
-
-function readConsent(): Consent | null {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<Consent> & Record<string, unknown>;
-    const analytics = typeof parsed.analytics === "boolean" ? parsed.analytics : false;
-    const ads = typeof parsed.ads === "boolean" ? parsed.ads : false;
-    return { necessary: true, analytics, ads };
-  } catch {
-    return null;
-  }
-}
-
-function writeConsent(c: Consent) {
-  try {
-    localStorage.setItem(LS_KEY, JSON.stringify(c));
-    window.dispatchEvent(new CustomEvent(CHANGE_EVT, { detail: c }));
-  } catch {}
-}
-
-/** Bouton réutilisable pour rouvrir le bandeau (ex: sur /cookies). */
+// Bouton réutilisable pour rouvrir le bandeau (si besoin ailleurs)
 export function CookieManageButton({
   className = "",
   label = "Personnaliser les cookies",
@@ -45,7 +22,7 @@ export function CookieManageButton({
   return (
     <button
       type="button"
-      onClick={() => window.dispatchEvent(new Event(OPEN_EVT))}
+      onClick={() => openConsentBanner()}
       className={`inline-flex items-center justify-center rounded-md px-3 py-2 ring-1 ring-white/15 bg-white/10 hover:bg-white/15 text-white ${className}`}
     >
       {label}
@@ -53,47 +30,59 @@ export function CookieManageButton({
   );
 }
 
-/** Bandeau cookies — Client only (évite les soucis d’hydratation). */
 export default function CookieNotice() {
   const [consent, setConsent] = useState<Consent | null>(null);
   const [open, setOpen] = useState(false);
   const [customize, setCustomize] = useState(false);
-
-  // Focus par défaut sur “Tout accepter”
   const acceptRef = useRef<HTMLButtonElement | null>(null);
 
+  // init
   useEffect(() => {
-    const saved = readConsent();
-    setConsent(saved);
-    setOpen(!saved); // ouvre si aucun choix
+    const c = loadConsent();
+    setConsent(c);
+    setOpen(!c); // ouvre si aucun choix
   }, []);
 
+  // focus CTA si bandeau ouvert (vue simple)
   useEffect(() => {
     if (open && !customize) {
-      const t = window.setTimeout(() => acceptRef.current?.focus(), 50);
+      const t = window.setTimeout(() => acceptRef.current?.focus(), 40);
       return () => window.clearTimeout(t);
     }
   }, [open, customize]);
 
-  // Permettre d’ouvrir depuis /cookies
+  // permettre la ré-ouverture (depuis /cookies)
   useEffect(() => {
-    const onOpen = () => { setCustomize(true); setOpen(true); };
-    window.addEventListener(OPEN_EVT, onOpen);
-    return () => window.removeEventListener(OPEN_EVT, onOpen);
+    const onOpen = () => {
+      setCustomize(true);
+      setOpen(true);
+    };
+    window.addEventListener("cookie:open", onOpen);
+    return () => window.removeEventListener("cookie:open", onOpen);
   }, []);
 
+  // synchro inter-onglets + autres composants
+  useEffect(() => {
+    const unsub = subscribeConsent((c) => {
+      setConsent(c);
+      // si un consent est enregistré ailleurs, on ferme le bandeau
+      setOpen(false);
+      setCustomize(false);
+    });
+    return unsub;
+  }, []);
+
+  /* Actions */
   const acceptAll = () => {
-    const c: Consent = { necessary: true, analytics: true, ads: true };
-    writeConsent(c);
-    setConsent(c);
+    saveConsent({ necessary: true, analytics: true, ads: true });
+    setConsent({ necessary: true, analytics: true, ads: true });
     setOpen(false);
     setCustomize(false);
   };
 
   const rejectAll = () => {
-    const c: Consent = { necessary: true, analytics: false, ads: false };
-    writeConsent(c);
-    setConsent(c);
+    saveConsent({ necessary: true, analytics: false, ads: false });
+    setConsent({ necessary: true, analytics: false, ads: false });
     setOpen(false);
     setCustomize(false);
   };
@@ -104,7 +93,7 @@ export default function CookieNotice() {
       analytics: !!consent?.analytics,
       ads: !!consent?.ads,
     };
-    writeConsent(c);
+    saveConsent(c);
     setConsent(c);
     setOpen(false);
     setCustomize(false);
@@ -124,9 +113,8 @@ export default function CookieNotice() {
         <div className="flex flex-col gap-3 text-white/90 text-sm">
           <div id="cookie-blurb">
             <strong>Cookies</strong> — Nous utilisons des cookies nécessaires au bon fonctionnement du site.
-            Vous pouvez en option activer la <em>mesure d’audience</em> (statistiques anonymes) et la
-            <em> publicité personnalisée</em>. À défaut de consentement à la pub personnalisée, des
-            publicités <em>non personnalisées</em> (contextuelles) peuvent être affichées.
+            En option : <em>mesure d’audience (anonyme)</em> et <em>publicité personnalisée</em> (avec consentement).
+            À défaut, des publicités <em>non personnalisées</em> peuvent être affichées.
             <br />
             <Link href="/legal/confidentialite" className="underline underline-offset-2">
               En savoir plus
@@ -141,27 +129,33 @@ export default function CookieNotice() {
             <fieldset className="grid grid-cols-1 sm:grid-cols-2 gap-2" aria-labelledby="cookie-options-legend">
               <legend id="cookie-options-legend" className="sr-only">Options de consentement</legend>
 
-              <label className="flex items-center gap-2 rounded-md bg-white/5 ring-1 ring-white/10 px-2 py-1.5">
+              <label htmlFor="cookie-analytics" className="flex items-center gap-2 rounded-md bg-white/5 ring-1 ring-white/10 px-2 py-1.5">
                 <input
                   type="checkbox"
                   id="cookie-analytics"
                   name="analytics"
                   checked={!!consent?.analytics}
                   onChange={(e) =>
-                    setConsent({ ...(consent ?? { necessary: true, analytics: false, ads: false }), analytics: e.target.checked })
+                    setConsent({
+                      ...(consent ?? { necessary: true, analytics: false, ads: false }),
+                      analytics: e.target.checked,
+                    })
                   }
                 />
                 <span>Mesure d’audience (anonyme)</span>
               </label>
 
-              <label className="flex items-center gap-2 rounded-md bg-white/5 ring-1 ring-white/10 px-2 py-1.5">
+              <label htmlFor="cookie-ads" className="flex items-center gap-2 rounded-md bg-white/5 ring-1 ring-white/10 px-2 py-1.5">
                 <input
                   type="checkbox"
                   id="cookie-ads"
                   name="ads"
                   checked={!!consent?.ads}
                   onChange={(e) =>
-                    setConsent({ ...(consent ?? { necessary: true, analytics: false, ads: false }), ads: e.target.checked })
+                    setConsent({
+                      ...(consent ?? { necessary: true, analytics: false, ads: false }),
+                      ads: e.target.checked,
+                    })
                   }
                 />
                 <span>Publicité personnalisée (profilage)</span>
@@ -170,9 +164,9 @@ export default function CookieNotice() {
           )}
 
           <div className="flex flex-wrap items-center gap-2" aria-describedby="cookie-blurb">
-            {/* ——— CTA principal “Tout accepter” très mis en avant ——— */}
             {!customize ? (
               <>
+                {/* CTA principal, très mis en avant */}
                 <button
                   ref={acceptRef}
                   type="button"
@@ -188,16 +182,18 @@ export default function CookieNotice() {
                   ✓ Tout accepter
                 </button>
 
-                {/* Personnaliser : bouton secondaire sobre */}
                 <button
                   type="button"
                   className="rounded-md bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2"
-                  onClick={() => { setCustomize(true); setConsent((c) => c ?? { necessary: true, analytics: false, ads: false }); }}
+                  onClick={() => {
+                    setCustomize(true);
+                    setConsent((c) => c ?? { necessary: true, analytics: false, ads: false });
+                  }}
                 >
                   Personnaliser…
                 </button>
 
-                {/* Lien discret : continuer sans accepter (équivalent “tout refuser”) */}
+                {/* Lien discret, pas encadré : “continuer sans accepter” */}
                 <span
                   role="button"
                   tabIndex={0}
@@ -225,7 +221,6 @@ export default function CookieNotice() {
                   Annuler
                 </button>
 
-                {/* Lien discret aussi en mode personnalisation */}
                 <span
                   role="button"
                   tabIndex={0}
