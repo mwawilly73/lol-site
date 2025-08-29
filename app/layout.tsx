@@ -7,10 +7,11 @@ import ConsentDomBridge from "@/components/ConsentDomBridge";
 import AnalyticsBridge from "@/components/AnalyticsBridge";
 import SiteFooter from "@/components/SiteFooter";
 import CookieNotice from "@/components/CookieNotice";
-import ConsentGtagBridge from "@/components/ConsentGtagBridge"; // ✅ nouveau
+import ConsentGtagBridge from "@/components/ConsentGtagBridge";
 import AnalyticsLoader from "@/components/AnalyticsLoader";
 import AdsConsentBridge from "@/components/AdsConsentBridge";
 import AdSenseAuto from "@/components/AdSenseAuto";
+import ClientMount from "@/components/ClientMount";
 
 export const metadata: Metadata = {
   title: "LoL Quiz — Accueil",
@@ -58,8 +59,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* En-tête global */}
         <SiteHeader />
 
+        {/* Bandeau cookies RGPD (monté côté client avec délai pour ne pas impacter le LCP) */}
+        <ClientMount delayMs={1500}>
+
         {/* Bandeau cookies RGPD */}
         <CookieNotice />
+        
+        </ClientMount>
 
         {/* 🔌 Bridge Consent → gtag (no-op si gtag absent) */}
         <ConsentGtagBridge />

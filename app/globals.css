@@ -31,7 +31,7 @@ body{background:var(--bg);color:var(--fg)}
 /* === Site-wide background (fixe, sombre, LoL) ===================== */
 :root{
   /* Change l’URL si tu veux une autre image */
-  --site-bg-url: url("/bg/bilgewaterBackground01ia.png");
+  --site-bg-url: url("/bg/bilgewaterBackground01ia.webp");
 }
 
 /* Important: crée un contexte pour superposer le ::before proprement */
@@ -277,3 +277,12 @@ button:active{transform:translateY(1px)}
 @media (prefers-reduced-motion: reduce){
   *{animation:none !important;transition:none !important;scroll-behavior:auto !important}
 }
+
+/* Évite le coût du background fixe sur mobile */
+@media (max-width: 1024px) {
+  body { background-attachment: scroll !important; }
+}
+
+/* Option : ne peins pas une section hors-écran tant qu’elle n’est pas visible */
+.cv-auto { content-visibility: auto; contain-intrinsic-size: 800px 600px; }
+

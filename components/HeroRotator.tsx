@@ -2,17 +2,13 @@
 "use client";
 
 import Image from "next/image";
-import { PropsWithChildren, useEffect, useMemo, useRef, useState } from "react";
+import { PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   images: string[];
   intervalMs?: number;
   className?: string;
 };
-
-const HERO_SIZES =
-  // Ton site est centré en max-w-6xl (~1152px). On évite "100vw" pour supprimer le warning.
-  "(min-width:1280px) 1152px, 100vw";
 
 export default function HeroRotator({
   images,
@@ -25,76 +21,54 @@ export default function HeroRotator({
     [images]
   );
 
-  // Index de la couche "rotation" (au-dessus de la base)
   const [idx, setIdx] = useState(0);
-  // Ne démarre la rotation qu'après la fenêtre LCP
-  const [rotating, setRotating] = useState(false);
+  const [allowRotate, setAllowRotate] = useState(false);
+  const timerRef = useRef<number | null>(null);
+  const firstLoadedRef = useRef(false);
 
-  const intervalRef = useRef<number | null>(null);
-  const startTimeoutRef = useRef<number | null>(null);
-  const fallbackTimeoutRef = useRef<number | null>(null);
+  const ROTATE_START_DELAY_MS = Math.max(intervalMs + 2000, 6000);
 
-  // Démarrer la rotation : après onload + marge
-  useEffect(() => {
-    if (safeImages.length <= 1) return;
-
-    const start = () => {
-      if (rotating) return;
-      // petite marge après onload pour être sûr de ne pas parasiter le LCP
-      startTimeoutRef.current = window.setTimeout(() => {
-        setRotating(true);
-      }, 3500) as unknown as number;
+  const scheduleIdle = useCallback((cb: () => void, timeout = 2600) => {
+    const w = window as unknown as {
+      requestIdleCallback?: (fn: () => void, o?: { timeout: number }) => number;
     };
-
-    // on attend l'évènement 'load'
-    if (document.readyState === "complete") {
-      start();
+    if (typeof w.requestIdleCallback === "function") {
+      w.requestIdleCallback(cb, { timeout });
     } else {
-      const onLoad = () => start();
-      window.addEventListener("load", onLoad, { once: true });
-      // fallback si 'load' capricieux en dev/HMR
-      fallbackTimeoutRef.current = window.setTimeout(() => start(), 6000) as unknown as number;
-      return () => {
-        window.removeEventListener("load", onLoad);
-      };
+      window.setTimeout(cb, timeout);
     }
+  }, []);
 
-    return () => {
-      if (startTimeoutRef.current) window.clearTimeout(startTimeoutRef.current);
-      if (fallbackTimeoutRef.current) window.clearTimeout(fallbackTimeoutRef.current);
-    };
-  }, [safeImages, rotating]);
-
-  // Boucle de rotation (uniquement quand rotating === true)
   useEffect(() => {
-    if (!rotating || safeImages.length <= 1) return;
-
-    intervalRef.current = window.setInterval(() => {
+    if (!allowRotate || safeImages.length <= 1) return;
+    timerRef.current = window.setInterval(() => {
       setIdx((i) => (i + 1) % safeImages.length);
     }, intervalMs) as unknown as number;
-
     return () => {
-      if (intervalRef.current) window.clearInterval(intervalRef.current);
+      if (timerRef.current) window.clearInterval(timerRef.current);
     };
-  }, [rotating, safeImages, intervalMs]);
+  }, [allowRotate, safeImages, intervalMs]);
 
-  // Pré-chargement "soft" de l'image suivante
   useEffect(() => {
-    if (!rotating || safeImages.length <= 1) return;
+    if (!allowRotate || safeImages.length <= 1) return;
     const next = safeImages[(idx + 1) % safeImages.length];
 
-    type ImgWithFetchPriority = HTMLImageElement & {
-      fetchPriority?: "high" | "low" | "auto";
-    };
+    type ImgWithFetchPriority = HTMLImageElement & { fetchPriority?: "high" | "low" | "auto" };
 
-    try {
+    scheduleIdle(() => {
       const pre = new window.Image() as ImgWithFetchPriority;
       pre.decoding = "async";
       pre.referrerPolicy = "no-referrer";
       pre.fetchPriority = "low";
       pre.src = next;
-    } catch {}
-  }, [rotating, idx, safeImages]);
+    }, 1200);
+  }, [allowRotate, idx, safeImages, scheduleIdle]);
+
+  const onFirstLoaded = useCallback(() => {
+    if (firstLoadedRef.current) return;
+    firstLoadedRef.current = true;
+    window.setTimeout(() => setAllowRotate(true), ROTATE_START_DELAY_MS);
+  }, [ROTATE_START_DELAY_MS]);
 
   if (safeImages.length === 0) {
     return (
@@ -108,55 +82,40 @@ export default function HeroRotator({
     );
   }
 
-  // Image de base : la 1ʳᵉ, PRIORITAIRE → devient bien le LCP
-  const base = safeImages[0];
-  // Image au-dessus : la "courante" quand rotation active
   const current = safeImages[idx];
+
+  const SIZES =
+    "(min-width: 1280px) 1152px, (min-width: 640px) calc(100vw - 2rem), calc(100vw - 1.5rem)";
+
+  const isDev = process.env.NODE_ENV !== "production";
+  const priority = isDev ? true : idx === 0;
+  const loading: "eager" | "lazy" | undefined = priority ? undefined : idx === 0 ? "eager" : "lazy";
 
   return (
     <section
       className={`relative overflow-hidden rounded-2xl ring-1 ring-white/10 ${className}`}
       aria-label="Mise en avant"
     >
-      {/* Même gabarit + fond opaque pour éviter toute transparence au chargement */}
-      <div className="relative h-[42vh] min-h-[260px] sm:h-[52vh] bg-[#0b0f16]">
-        {/* Couche de base — ne bouge plus → LCP stable */}
+      <div className="relative h-[42vh] min-h-[260px] sm:h-[52vh]">
         <Image
-          src={base}
-          alt="" // décoratif
+          src={current}
+          alt=""
           fill
-          sizes={HERO_SIZES}
-          quality={85}
-          priority // ✅ LCP : seule cette image est prioritaire
-          loading="eager"
-          className="absolute inset-0 object-cover object-center"
+          sizes={SIZES}
+          quality={80}
+          priority={priority}
+          {...(loading ? { loading } : {})}   // ⬅️ on n’envoie pas loading si priority=true
+          className="object-cover object-center"
+          onLoad={idx === 0 ? onFirstLoaded : undefined}
         />
 
-        {/* Couche de rotation — par-dessus, uniquement après onload+marge */}
-        {rotating && (
-          <Image
-            key={current}
-            src={current}
-            alt="" // décoratif
-            fill
-            sizes={HERO_SIZES}
-            quality={85}
-            // pas de priority ici
-            className="absolute inset-0 object-cover object-center transition-opacity duration-700 opacity-100"
-          />
-        )}
-
-        {/* Voile sombre + dégradé (au-dessus des images) */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute inset-0 bg-black/45" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
         </div>
 
-        {/* Contenu centré */}
         <div className="absolute inset-0 flex items-center justify-center px-4">
-          <div className="text-center">
-            {children}
-          </div>
+          <div className="text-center">{children}</div>
         </div>
       </div>
     </section>

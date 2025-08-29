@@ -1,44 +1,42 @@
+// components/AnalyticsBridge.tsx
 "use client";
 
 import { useEffect } from "react";
-import { readConsentClient, subscribeConsent } from "@/lib/consent";
+import type { ConsentSnapshot } from "@/lib/consent";
 
-function ensurePlausibleLoaded(domain: string) {
-  if (document.querySelector('script[data-plausible="true"]')) return;
-  const s = document.createElement("script");
-  s.setAttribute("data-plausible", "true");
-  s.defer = true;
-  s.src = "https://plausible.io/js/script.js";
-  // domaine sans protocole/chemin
-  s.setAttribute(
-    "data-domain",
-    domain.replace(/^https?:\/\//, "").replace(/\/.*$/, "")
-  );
-  document.head.appendChild(s);
+declare global {
+  interface Window {
+    plausible?: (...args: unknown[]) => void;
+  }
 }
 
+/** Monte/descend Plausible en fonction du consentement analytics. */
 export default function AnalyticsBridge() {
   useEffect(() => {
-    const domain =
-      (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000")
-        .replace(/^https?:\/\//, "")
-        .replace(/\/.*$/, "");
+    const apply = (enabled: boolean) => {
+      const id = "plausible-script";
+      const existing = document.getElementById(id) as HTMLScriptElement | null;
 
-    // État initial
-    const snap = readConsentClient();
-    if ((snap as any)?.analytics) ensurePlausibleLoaded(domain);
-
-    // Mises à jour
-    const unsub = subscribeConsent((c: unknown) => {
-      const a = !!(c as any)?.analytics;
-      if (a) ensurePlausibleLoaded(domain);
-      // si l’utilisateur retire son consentement après coup,
-      // on s’abstient de recharger (pas d’envoi supplémentaire).
-    });
-
-    return () => {
-      unsub && unsub();
+      if (enabled) {
+        if (existing) return;
+        const s = document.createElement("script");
+        s.id = id;
+        s.defer = true;
+        s.setAttribute("data-domain", (process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN ?? "").trim());
+        s.src = "https://plausible.io/js/script.js";
+        document.head.appendChild(s);
+      } else if (existing) {
+        existing.remove();
+      }
     };
+
+    const onConsent = (e: Event) => {
+      const evt = e as CustomEvent<ConsentSnapshot>;
+      apply(!!evt.detail?.analytics);
+    };
+
+    window.addEventListener("cookie-consent", onConsent);
+    return () => window.removeEventListener("cookie-consent", onConsent);
   }, []);
 
   return null;

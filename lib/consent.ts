@@ -2,7 +2,7 @@
 // Consent v2 (unifié) :
 // - necessary (toujours true)
 // - analytics (opt-in)
-// - adsPersonalized (opt-in)  ✅ nouveau nom canonique
+// - adsPersonalized (opt-in)  ✅ nom canonique
 //   * Compat lecture/écriture avec l’ancien "ads"
 // Stockage : localStorage + cookies (lecture SSR possible via header).
 // Évènements : "cookie-consent" (CustomEvent), "cookie:open" (ouvrir le bandeau).
@@ -22,6 +22,9 @@ export type ConsentLegacy = {
   ads: boolean;
 };
 
+// Alias rétro-compat : certains fichiers importent encore `Consent`
+export type Consent = ConsentSnapshot;
+
 // Pour hasConsent()
 export type ConsentKind = "analytics" | "adsPersonalized" | "ads";
 
@@ -32,7 +35,7 @@ const LS_KEY = `cookie:consent:v${CONSENT_VERSION}`;
 
 // Cookies envoyés côté client (aident pour lecture SSR)
 const COOKIE_ANALYTICS = "analytics";         // "1" | "0"
-const COOKIE_ADS = "ads";                     // "1" | "0"   (non-personnalisé vs personnalisé)
+const COOKIE_ADS = "ads";                     // "1" | "0"   (personnalisé)
 const COOKIE_DECIDED = "consent_decided";     // "1" si un choix a été fait
 
 const DEFAULT: ConsentSnapshot = {
@@ -43,7 +46,7 @@ const DEFAULT: ConsentSnapshot = {
 
 /* ───────────── Cookies helpers ───────────── */
 
-function setCookie(name: string, value: string, maxAgeDays = 365) {
+function setCookie(name: string, value: string, maxAgeDays = 365): void {
   if (typeof document === "undefined") return;
   try {
     const maxAge = maxAgeDays * 24 * 60 * 60;
@@ -87,7 +90,7 @@ function readLS(): ConsentSnapshot | null {
     if (!raw) return null;
 
     // On accepte les deux schémas (nouveau et ancien)
-    const parsed = JSON.parse(raw) as Partial<ConsentSnapshot & ConsentLegacy> & Record<string, unknown>;
+    const parsed = JSON.parse(raw) as Partial<ConsentSnapshot & ConsentLegacy>;
     const analytics = typeof parsed.analytics === "boolean" ? parsed.analytics : false;
 
     // Priorité au nouveau champ "adsPersonalized", sinon fallback "ads"
@@ -104,7 +107,7 @@ function readLS(): ConsentSnapshot | null {
   }
 }
 
-function writeLS(s: ConsentSnapshot) {
+function writeLS(s: ConsentSnapshot): void {
   if (typeof localStorage === "undefined") return;
   try {
     // On sauve le nouveau schéma + un miroir "ads" pour compat
@@ -132,17 +135,20 @@ export function loadConsent(): ConsentSnapshot | null {
   return { necessary: true, analytics, adsPersonalized };
 }
 
-/** Alias demandé par ton code existant. */
+/** Alias demandé par du code existant. */
 export const readConsentClient = loadConsent;
 
-/** Event names (export si besoin ailleurs). */
+/** Event names (réutilisables ailleurs). */
 export const CHANGE_EVENT = "cookie-consent";
 export const OPEN_EVENT = "cookie:open";
 
 /** Surcharges : objet OU ('all'|'necessary', adsPersonalized?) */
 export function saveConsent(snapshot: ConsentSnapshot | ConsentLegacy): void;
 export function saveConsent(mode: "all" | "necessary", adsPersonalized?: boolean): void;
-export function saveConsent(arg1: any, arg2?: any): void {
+export function saveConsent(
+  arg1: ConsentSnapshot | ConsentLegacy | "all" | "necessary",
+  arg2?: boolean
+): void {
   let s: ConsentSnapshot;
 
   if (typeof arg1 === "string") {
@@ -164,10 +170,10 @@ export function saveConsent(arg1: any, arg2?: any): void {
   setCookie(COOKIE_ADS, s.adsPersonalized ? "1" : "0");
   setCookie(COOKIE_DECIDED, "1");
 
-  // Broadcast (detail contient les deux clés pour compat)
+  // Broadcast (detail contient aussi "ads" pour compat)
   try {
     const detail: ConsentSnapshot & { ads: boolean } = { ...s, ads: s.adsPersonalized };
-    window.dispatchEvent(new CustomEvent<typeof detail>(CHANGE_EVENT, { detail }));
+    window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail }));
   } catch {}
 }
 
@@ -192,24 +198,52 @@ export function hasConsent(kind: ConsentKind): boolean {
 }
 
 /** Demande d’ouvrir le bandeau (ex: depuis /cookies). */
-export function openConsentBanner() {
+export function openConsentBanner(): void {
   try {
     window.dispatchEvent(new Event(OPEN_EVENT));
   } catch {}
 }
 
 /** Abonnement aux changements de consentement (CustomEvent + storage). */
-export function subscribeConsent(cb: (c: ConsentSnapshot & { ads: boolean }) => void): () => void {
+export function subscribeConsent(
+  cb: (c: ConsentSnapshot & { ads: boolean }) => void
+): () => void {
   if (typeof window === "undefined") return () => {};
-  const onCustom = (e: Event) => {
-    const evt = e as CustomEvent<ConsentSnapshot & { ads: boolean }>;
-    if (evt?.detail) cb(evt.detail);
+
+  const isDetail = (x: unknown): x is ConsentSnapshot & { ads: boolean } => {
+    if (!x || typeof x !== "object") return false;
+    const o = x as Record<string, unknown>;
+    return (
+      o.necessary === true &&
+      typeof o.analytics === "boolean" &&
+      (typeof o.adsPersonalized === "boolean" || typeof o.ads === "boolean")
+    );
   };
+
+  const onCustom = (e: Event) => {
+    const evt = e as CustomEvent<unknown>;
+    if (isDetail(evt.detail)) {
+      cb({
+        necessary: true,
+        analytics: !!evt.detail.analytics,
+        adsPersonalized:
+          typeof (evt.detail as Record<string, unknown>).adsPersonalized === "boolean"
+            ? (evt.detail as ConsentSnapshot).adsPersonalized
+            : !!(evt.detail as Record<string, unknown>).ads,
+        ads:
+          typeof (evt.detail as Record<string, unknown>).ads === "boolean"
+            ? !!(evt.detail as Record<string, unknown>).ads
+            : !!(evt.detail as Record<string, unknown>).adsPersonalized,
+      });
+    }
+  };
+
   const onStorage = (e: StorageEvent) => {
     if (e.key !== LS_KEY) return;
     const current = getConsentOrDefault();
     cb({ ...current, ads: current.adsPersonalized });
   };
+
   window.addEventListener(CHANGE_EVENT, onCustom as EventListener);
   window.addEventListener("storage", onStorage);
   return () => {
@@ -232,21 +266,21 @@ export function readConsentFromCookieHeader(cookieHeader: string | null | undefi
 
 /* ───────────── Helpers ergonomiques ───────────── */
 
-export function ensureDefaultConsent() {
+export function ensureDefaultConsent(): void {
   if (!loadConsent()) saveConsent(DEFAULT);
 }
 
-export function setAnalytics(enabled: boolean) {
+export function setAnalytics(enabled: boolean): void {
   const curr = getConsentOrDefault();
   saveConsent({ ...curr, analytics: !!enabled });
 }
 
-export function setAdsPersonalized(enabled: boolean) {
+export function setAdsPersonalized(enabled: boolean): void {
   const curr = getConsentOrDefault();
   saveConsent({ ...curr, adsPersonalized: !!enabled });
 }
 
 // Compat ancien helper
-export function setAds(enabled: boolean) {
+export function setAds(enabled: boolean): void {
   setAdsPersonalized(enabled);
 }

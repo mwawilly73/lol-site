@@ -2,7 +2,6 @@
 import type { Metadata } from "next";
 import HeroRotator from "@/components/HeroRotator";
 import GameCard from "@/components/GameCard";
-import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "LoL Quiz — Accueil",
@@ -57,7 +56,6 @@ export default function HomePage() {
       {/* JSON-LD SEO */}
       <script
         type="application/ld+json"
-        // @ts-ignore: on injecte une string JSON valide
         dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
       />
 
@@ -75,7 +73,8 @@ export default function HomePage() {
         </HeroRotator>
 
         {/* ===== SÉLECTEUR DE JEUX ===== */}
-        <div className="mx-auto max-w-6xl px-3 sm:px-4 py-8 sm:py-10">
+        <div className="mx-auto max-w-6xl px-3 sm:px-4 py-8 sm:py-10 cv-auto"
+          style={{ contentVisibility: "auto", containIntrinsicSize: "800px" }}>
           <div className="mb-4 sm:mb-6">
             <h2 className="text-lg sm:text-xl font-semibold text-white/90">
               Jeux disponibles
@@ -85,13 +84,12 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 cv-auto">
             <GameCard
               href="/games/champions"
               title="Liste des champions"
               subtitle="Devine les 171 champions de LoL"
               imageUrl={CHAMPIONS_CARD_BG}
-              priority
             />
 
             {/* Placeholder pour futurs jeux */}
