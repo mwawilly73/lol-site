@@ -1,89 +1,135 @@
 // components/HeroRotator.tsx
 "use client";
 
-import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import NextImage from "next/image";
 
 type Props = {
   images: string[];
-  intervalMs?: number;
-  children?: React.ReactNode;
+  intervalMs?: number; // défaut: 5000ms
+  children?: ReactNode;
 };
 
-/**
- * Hero avec rotation d’images :
- * - Base opaque (bg solide) qui masque le background global.
- * - Images en full cover (object-cover), crossfade doux.
- * - Overlay sombre lisible.
- * - Aucune transparence ne laisse voir le background du site.
- */
-export default function HeroRotator({ images, intervalMs = 5000, children }: Props) {
-  const [idx, setIdx] = useState(0);
-  const timerRef = useRef<number | null>(null);
+// Petite helper: exécute cb quand le thread est dispo (ou après ~200ms)
+function scheduleIdle(cb: () => void, timeout = 1500) {
+  const ric = (globalThis as any).requestIdleCallback as
+    | ((cb: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void, opts?: { timeout?: number }) => number)
+    | undefined;
 
-  // Rotation aléatoire (différent du précédent)
+  if (typeof ric === "function") {
+    ric(() => cb(), { timeout });
+  } else {
+    setTimeout(cb, 200);
+  }
+}
+
+export default function HeroRotator({ images, intervalMs = 5000, children }: Props) {
+  // Filtre URLs valides
+  const safeImages = useMemo(
+    () => (Array.isArray(images) ? images.filter((u) => typeof u === "string" && u.trim().length > 0) : []),
+    [images]
+  );
+
+  // Index courant + précédent (pour crossfade)
+  const [idx, setIdx] = useState(0);
+  const [prevIdx, setPrevIdx] = useState(0);
+
+  // Auto-rotation: un seul interval, on met à jour idx/prevIdx de façon fonctionnelle
   useEffect(() => {
-    if (!images?.length) return;
-    timerRef.current = window.setInterval(() => {
-      setIdx((prev) => {
-        if (images.length <= 1) return prev;
-        let next = prev;
-        while (next === prev) {
-          next = Math.floor(Math.random() * images.length);
-        }
-        return next;
+    if (safeImages.length <= 1) return;
+    const id = window.setInterval(() => {
+      setIdx((i) => {
+        setPrevIdx(i);
+        return (i + 1) % safeImages.length;
       });
-    }, intervalMs) as unknown as number;
+    }, intervalMs);
+    return () => window.clearInterval(id);
+  }, [safeImages.length, intervalMs]);
+
+  // Warm-up de l’image suivante (sans <link rel="preload">)
+  useEffect(() => {
+    if (safeImages.length <= 1) return;
+    // Évite data-saver et l’onglet non visible
+    // @ts-ignore - NetworkInformation pas partout
+    if (navigator?.connection?.saveData) return;
+    if (document.visibilityState === "hidden") return;
+
+    const nextUrl = safeImages[(idx + 1) % safeImages.length];
+    let cancelled = false;
+
+    scheduleIdle(() => {
+      if (cancelled) return;
+      type ImgWithFetchPriority = HTMLImageElement & { fetchPriority?: "high" | "low" | "auto" };
+      const pre = new window.Image() as ImgWithFetchPriority;
+      pre.decoding = "async";
+      pre.referrerPolicy = "no-referrer";
+      pre.fetchPriority = "low";
+      pre.src = nextUrl; // déclenche le fetch
+    });
 
     return () => {
-      if (timerRef.current) window.clearInterval(timerRef.current);
+      cancelled = true;
     };
-  }, [images, intervalMs]);
+  }, [idx, safeImages]);
+
+  const currentUrl = safeImages[idx] ?? "";
+  const previousUrl = prevIdx !== idx ? (safeImages[prevIdx] ?? "") : ""; // ⚠️ pas d’image “prev” au 1er rendu
+  const isFirst = idx === 0;
 
   return (
-    <div
-      className="
-        relative isolate
-        mx-auto max-w-6xl
-        my-3 sm:my-4
-        h-[42vh] min-h-[280px] sm:h-[56vh] lg:h-[64vh]
-        overflow-hidden rounded-2xl ring-1 ring-white/10 shadow-lg
-      "
+    <section
+      className="relative isolate overflow-hidden"
+      aria-label="Diaporama d'illustrations League of Legends"
     >
-      {/* ✅ BASE OPAQUE : masque totalement le bg du site */}
-      <div className="absolute inset-0 bg-[#0e1117]" aria-hidden />
+      {/* Fond plein = empêche le bg-site de transparaître */}
+      <div className="absolute inset-0 -z-10 bg-[#0e1117]" aria-hidden="true" />
 
-      {/* Pile d’images en cover (aucun espace vide) */}
-      <div className="absolute inset-0">
-        {images.map((src, i) => (
-          <Image
-            key={src}
-            src={src}
+      {/* Calque image précédente (fade-out) */}
+      {previousUrl && (
+        <div className="absolute inset-0">
+          <NextImage
+            key={`prev-${prevIdx}`}
+            src={previousUrl}
             alt=""
             fill
-            priority={i === idx}
-            sizes="(max-width: 1280px) 100vw, 1280px"
-            quality={85}
-            className={`object-cover will-change-[opacity,transform] transition-opacity duration-700 ease-out
-              ${i === idx ? "opacity-100" : "opacity-0"}
-            `}
+            sizes="100vw"
+            priority={false}
+            className="object-cover will-change-opacity transition-opacity duration-700 opacity-0"
           />
-        ))}
-      </div>
+        </div>
+      )}
 
-      {/* Scrim lisible (sombre) – pas transparent au point de laisser voir le BG du site */}
+      {/* Calque image courante (fade-in) */}
+      {currentUrl && (
+        <div className="absolute inset-0">
+          <NextImage
+            key={`cur-${idx}`}
+            src={currentUrl}
+            alt=""
+            fill
+            sizes="100vw"
+            priority={isFirst} // ✅ LCP sur la 1ère image
+            className="object-cover will-change-opacity transition-opacity duration-700 opacity-100"
+          />
+        </div>
+      )}
+
+      {/* Overlay sombre (bords propres, pas de transparence) */}
       <div
-        className="
-          pointer-events-none absolute inset-0
-          bg-gradient-to-b from-black/60 via-black/35 to-black/65
-        "
-        aria-hidden
+        className="absolute inset-0"
+        aria-hidden="true"
+        style={{
+          background:
+            "radial-gradient(120% 80% at 50% 20%, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 55%, rgba(0,0,0,0.75) 100%)",
+        }}
       />
 
-      {/* Contenu au-dessus des images */}
-      <div className="relative z-10 h-full w-full flex items-center justify-center px-3 sm:px-6">
-        {children}
+      {/* Contenu centré */}
+      <div className="relative mx-auto max-w-6xl px-3 sm:px-4">
+        <div className="flex min-h-[36vh] sm:min-h-[44vh] items-center justify-center">
+          {children}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
