@@ -1,180 +1,252 @@
 // components/CookieNotice.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 
-type ConsentV1 = {
-  v: 1;
-  essential: true;
-  analytics: boolean;
+type Consent = {
+  necessary: true;      // toujours actif
+  analytics: boolean;   // mesure d’audience anonyme
+  ads: boolean;         // publicité personnalisée (opt-in)
 };
 
-const STORAGE_KEY = "cookie-consent.v1";
-const OPEN_EVENT = "cookie:open-prefs";
+const LS_KEY = "cookie-consent-v2";
+const OPEN_EVT = "cookie:open";
+const CHANGE_EVT = "cookie:change";
 
-function readConsent(): ConsentV1 | null {
+function readConsent(): Consent | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(LS_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as ConsentV1;
-    if (parsed && parsed.v === 1 && typeof parsed.analytics === "boolean") {
-      return parsed;
-    }
-  } catch {}
-  return null;
+    const parsed = JSON.parse(raw) as Partial<Consent> & Record<string, unknown>;
+    const analytics = typeof parsed.analytics === "boolean" ? parsed.analytics : false;
+    const ads = typeof parsed.ads === "boolean" ? parsed.ads : false;
+    return { necessary: true, analytics, ads };
+  } catch {
+    return null;
+  }
 }
-function writeConsent(c: ConsentV1) {
+
+function writeConsent(c: Consent) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(c));
+    localStorage.setItem(LS_KEY, JSON.stringify(c));
+    window.dispatchEvent(new CustomEvent(CHANGE_EVT, { detail: c }));
   } catch {}
 }
 
-export default function CookieNotice() {
-  const [visible, setVisible] = useState(false);
-  const [showPrefs, setShowPrefs] = useState(false);
-  const [analytics, setAnalytics] = useState(false);
-
-  // Au montage : si pas de consentement => afficher la bannière
-  useEffect(() => {
-    const c = readConsent();
-    if (!c) {
-      setVisible(true);
-      setShowPrefs(false);
-      setAnalytics(false);
-    }
-  }, []);
-
-  // Permet d’ouvrir la modale “Préférences” depuis n’importe où
-  useEffect(() => {
-    const onOpen = () => {
-      const c = readConsent();
-      setAnalytics(Boolean(c?.analytics));
-      setVisible(true);
-      setShowPrefs(true);
-    };
-    window.addEventListener(OPEN_EVENT, onOpen);
-    return () => window.removeEventListener(OPEN_EVENT, onOpen);
-  }, []);
-
-  const acceptAll = () => {
-    writeConsent({ v: 1, essential: true, analytics: true });
-    setVisible(false);
-  };
-  const refuseAll = () => {
-    writeConsent({ v: 1, essential: true, analytics: false });
-    setVisible(false);
-  };
-  const savePrefs = () => {
-    writeConsent({ v: 1, essential: true, analytics });
-    setVisible(false);
-  };
-
-  // Si déjà consenti => ne rien afficher
-  const alreadyConsented = useMemo(() => !!readConsent(), []);
-  if (!visible && alreadyConsented) return null;
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Consentement aux cookies"
-      className={`fixed inset-x-0 bottom-0 z-[60] px-3 sm:px-4 pb-3 transition-opacity ${
-        visible ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
-      }`}
-    >
-      <div className="mx-auto max-w-6xl">
-        <div className="rounded-2xl ring-1 ring-white/10 bg-[#0e1117]/95 backdrop-blur-md shadow-2xl overflow-hidden">
-          <div className="p-3 sm:p-4">
-            {!showPrefs ? (
-              <>
-                <div className="text-sm sm:text-base text-white/90">
-                  Nous utilisons des cookies techniques indispensables et (optionnels) de mesure d’audience anonymisée.
-                  Vous pouvez accepter, refuser ou personnaliser.
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={acceptAll}
-                    className="px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-500 text-white text-sm font-semibold"
-                  >
-                    Accepter tout
-                  </button>
-                  <button
-                    type="button"
-                    onClick={refuseAll}
-                    className="px-3 py-1.5 rounded-md bg-gray-700 hover:bg-gray-600 text-white text-sm"
-                  >
-                    Refuser
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowPrefs(true)}
-                    className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 text-white text-sm"
-                  >
-                    Personnaliser
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="text-sm sm:text-base font-semibold">Préférences des cookies</div>
-                <div className="mt-2 space-y-2 text-sm text-white/90">
-                  <label className="flex items-start gap-2">
-                    <input type="checkbox" checked disabled className="mt-1" />
-                    <span>
-                      <strong>Essentiels</strong> — nécessaires au fonctionnement du site. Toujours actifs.
-                    </span>
-                  </label>
-                  <label className="flex items-start gap-2">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={analytics}
-                      onChange={(e) => setAnalytics(e.target.checked)}
-                    />
-                    <span>
-                      <strong>Mesure d’audience</strong> — statistiques anonymisées (sans pub ciblée).
-                    </span>
-                  </label>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={savePrefs}
-                    className="px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold"
-                  >
-                    Enregistrer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowPrefs(false)}
-                    className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 text-white text-sm"
-                  >
-                    Retour
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** Bouton à placer n’importe où pour rouvrir la modale de préférences */
-export function CookieManageButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+/** Bouton réutilisable pour rouvrir le bandeau (ex: sur /cookies). */
+export function CookieManageButton({
+  className = "",
+  label = "Personnaliser les cookies",
+}: {
+  className?: string;
+  label?: string;
+}) {
   return (
     <button
       type="button"
-      {...props}
-      onClick={(e) => {
-        props.onClick?.(e);
-        window.dispatchEvent(new Event(OPEN_EVENT));
-      }}
+      onClick={() => window.dispatchEvent(new Event(OPEN_EVT))}
+      className={`inline-flex items-center justify-center rounded-md px-3 py-2 ring-1 ring-white/15 bg-white/10 hover:bg-white/15 text-white ${className}`}
     >
-      Gérer les cookies
+      {label}
     </button>
+  );
+}
+
+/** Bandeau cookies — Client only (évite les soucis d’hydratation). */
+export default function CookieNotice() {
+  const [consent, setConsent] = useState<Consent | null>(null);
+  const [open, setOpen] = useState(false);
+  const [customize, setCustomize] = useState(false);
+
+  // Focus par défaut sur “Tout accepter”
+  const acceptRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const saved = readConsent();
+    setConsent(saved);
+    setOpen(!saved); // ouvre si aucun choix
+  }, []);
+
+  useEffect(() => {
+    if (open && !customize) {
+      const t = window.setTimeout(() => acceptRef.current?.focus(), 50);
+      return () => window.clearTimeout(t);
+    }
+  }, [open, customize]);
+
+  // Permettre d’ouvrir depuis /cookies
+  useEffect(() => {
+    const onOpen = () => { setCustomize(true); setOpen(true); };
+    window.addEventListener(OPEN_EVT, onOpen);
+    return () => window.removeEventListener(OPEN_EVT, onOpen);
+  }, []);
+
+  const acceptAll = () => {
+    const c: Consent = { necessary: true, analytics: true, ads: true };
+    writeConsent(c);
+    setConsent(c);
+    setOpen(false);
+    setCustomize(false);
+  };
+
+  const rejectAll = () => {
+    const c: Consent = { necessary: true, analytics: false, ads: false };
+    writeConsent(c);
+    setConsent(c);
+    setOpen(false);
+    setCustomize(false);
+  };
+
+  const saveCustom = () => {
+    const c: Consent = {
+      necessary: true,
+      analytics: !!consent?.analytics,
+      ads: !!consent?.ads,
+    };
+    writeConsent(c);
+    setConsent(c);
+    setOpen(false);
+    setCustomize(false);
+  };
+
+  if (!open && consent) return null;
+
+  return (
+    <div
+      className={`fixed inset-x-0 bottom-0 z-50 mx-2 mb-2 transition-opacity duration-200
+      ${open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}
+      aria-hidden={!open}
+      role="region"
+      aria-label="Information cookies"
+    >
+      <div className="mx-auto max-w-4xl rounded-xl border border-white/10 bg-black/80 backdrop-blur-md shadow-2xl p-3 sm:p-4">
+        <div className="flex flex-col gap-3 text-white/90 text-sm">
+          <div id="cookie-blurb">
+            <strong>Cookies</strong> — Nous utilisons des cookies nécessaires au bon fonctionnement du site.
+            Vous pouvez en option activer la <em>mesure d’audience</em> (statistiques anonymes) et la
+            <em> publicité personnalisée</em>. À défaut de consentement à la pub personnalisée, des
+            publicités <em>non personnalisées</em> (contextuelles) peuvent être affichées.
+            <br />
+            <Link href="/legal/confidentialite" className="underline underline-offset-2">
+              En savoir plus
+            </Link>
+            {" · "}
+            <Link href="/cookies" className="underline underline-offset-2">
+              Gérer mes préférences
+            </Link>
+          </div>
+
+          {customize && (
+            <fieldset className="grid grid-cols-1 sm:grid-cols-2 gap-2" aria-labelledby="cookie-options-legend">
+              <legend id="cookie-options-legend" className="sr-only">Options de consentement</legend>
+
+              <label className="flex items-center gap-2 rounded-md bg-white/5 ring-1 ring-white/10 px-2 py-1.5">
+                <input
+                  type="checkbox"
+                  id="cookie-analytics"
+                  name="analytics"
+                  checked={!!consent?.analytics}
+                  onChange={(e) =>
+                    setConsent({ ...(consent ?? { necessary: true, analytics: false, ads: false }), analytics: e.target.checked })
+                  }
+                />
+                <span>Mesure d’audience (anonyme)</span>
+              </label>
+
+              <label className="flex items-center gap-2 rounded-md bg-white/5 ring-1 ring-white/10 px-2 py-1.5">
+                <input
+                  type="checkbox"
+                  id="cookie-ads"
+                  name="ads"
+                  checked={!!consent?.ads}
+                  onChange={(e) =>
+                    setConsent({ ...(consent ?? { necessary: true, analytics: false, ads: false }), ads: e.target.checked })
+                  }
+                />
+                <span>Publicité personnalisée (profilage)</span>
+              </label>
+            </fieldset>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2" aria-describedby="cookie-blurb">
+            {/* ——— CTA principal “Tout accepter” très mis en avant ——— */}
+            {!customize ? (
+              <>
+                <button
+                  ref={acceptRef}
+                  type="button"
+                  onClick={acceptAll}
+                  className="inline-flex items-center justify-center rounded-xl px-5 py-3
+                             text-white font-semibold text-base sm:text-[15px]
+                             bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-500
+                             hover:from-emerald-500 hover:via-emerald-400 hover:to-teal-400
+                             focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/80
+                             ring-1 ring-emerald-400/40 shadow-[0_10px_30px_rgba(16,185,129,0.35)]
+                             transition-transform active:translate-y-[1px]"
+                >
+                  ✓ Tout accepter
+                </button>
+
+                {/* Personnaliser : bouton secondaire sobre */}
+                <button
+                  type="button"
+                  className="rounded-md bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2"
+                  onClick={() => { setCustomize(true); setConsent((c) => c ?? { necessary: true, analytics: false, ads: false }); }}
+                >
+                  Personnaliser…
+                </button>
+
+                {/* Lien discret : continuer sans accepter (équivalent “tout refuser”) */}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={rejectAll}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); rejectAll(); } }}
+                  className="ml-auto text-xs sm:text-[13px] text-white/60 hover:text-white/80 underline underline-offset-2 cursor-pointer select-none focus:outline-none"
+                >
+                  continuer sans accepter
+                </span>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="rounded-md bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2"
+                  onClick={saveCustom}
+                >
+                  Enregistrer
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 text-white px-3 py-2"
+                  onClick={() => setCustomize(false)}
+                >
+                  Annuler
+                </button>
+
+                {/* Lien discret aussi en mode personnalisation */}
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={rejectAll}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); rejectAll(); } }}
+                  className="ml-auto text-xs sm:text-[13px] text-white/60 hover:text-white/80 underline underline-offset-2 cursor-pointer select-none focus:outline-none"
+                >
+                  continuer sans accepter
+                </span>
+              </>
+            )}
+          </div>
+
+          {!customize && (
+            <p className="text-white/70 text-xs">
+              “Tout accepter” active aussi la publicité personnalisée. Vous pouvez retirer votre consentement à tout
+              moment via <Link href="/cookies" className="underline underline-offset-2">la page Cookies</Link>.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
