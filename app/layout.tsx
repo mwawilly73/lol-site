@@ -3,8 +3,14 @@ import type { Metadata } from "next";
 import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";
 import CssGuard from "@/components/CssGuard";
+import ConsentDomBridge from "@/components/ConsentDomBridge";
+import AnalyticsBridge from "@/components/AnalyticsBridge";
 import SiteFooter from "@/components/SiteFooter";
 import CookieNotice from "@/components/CookieNotice";
+import ConsentGtagBridge from "@/components/ConsentGtagBridge"; // ✅ nouveau
+import AnalyticsLoader from "@/components/AnalyticsLoader";
+import AdsConsentBridge from "@/components/AdsConsentBridge";
+import AdSenseAuto from "@/components/AdSenseAuto";
 
 export const metadata: Metadata = {
   title: "LoL Quiz — Accueil",
@@ -22,6 +28,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const hasAdsense = !!process.env.NEXT_PUBLIC_ADSENSE_PUB_ID;
   return (
     <html lang="fr">
       <head>
@@ -38,14 +45,24 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* 🛟 Garde-fou CSS si les styles ne chargent pas */}
         <CssGuard />
 
+        {/* ↙️ montés très tôt pour être actifs dès le chargement */}
+        <AnalyticsLoader />
+        <AdsConsentBridge />
+
+        <ConsentDomBridge />
+        <AnalyticsBridge />
+
         {/* Lien d’évitement (invisible sauf au Tab) */}
         <a href="#main" className="skip-link">Aller au contenu principal</a>
 
         {/* En-tête global */}
         <SiteHeader />
 
-        {/* Bannière cookies RGPD */}
+        {/* Bandeau cookies RGPD */}
         <CookieNotice />
+
+        {/* 🔌 Bridge Consent → gtag (no-op si gtag absent) */}
+        <ConsentGtagBridge />
 
         {/* Contenu principal */}
         <main id="main" tabIndex={-1} className="mx-auto max-w-6xl px-3 sm:px-4 py-6">
@@ -54,6 +71,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         {/* Pied de page soigné */}
         <SiteFooter />
+
+          {/* Publicités AdSense Auto (si consentement) */}
+          {process.env.NODE_ENV === "production" && hasAdsense ? <AdSenseAuto /> : null}
       </body>
     </html>
   );

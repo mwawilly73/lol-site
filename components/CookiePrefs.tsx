@@ -2,52 +2,73 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { readConsentClient, saveConsent, openConsentBanner } from "@/lib/consent";
+import {
+  readConsentClient,
+  saveConsent,
+  type ConsentSnapshot,
+} from "@/lib/consent";
 
 export default function CookiePrefs() {
   const [mounted, setMounted] = useState(false);
   const [adsPersonalized, setAdsPersonalized] = useState(false);
+  const [snapshot, setSnapshot] = useState<ConsentSnapshot | null>(null);
 
   useEffect(() => {
     setMounted(true);
     const saved = readConsentClient();
-    if (saved) setAdsPersonalized(!!saved.ads); // ✅ propriété correcte
+    if (saved) {
+      setSnapshot(saved);
+      setAdsPersonalized(!!saved.adsPersonalized);
+    }
   }, []);
 
   if (!mounted) return null;
 
   const onSave = () => {
-    // Préserver l'état actuel d’analytics, ne changer que la pub perso
-    const current = readConsentClient();
-    saveConsent({
-      necessary: true,
-      analytics: !!current?.analytics,
-      ads: !!adsPersonalized,
-    });
+    // Si pubs perso activées → "all" (analytics = ON) ; sinon → "necessary".
+    const updated =
+      saveConsent(adsPersonalized ? "all" : "necessary", adsPersonalized) ??
+      ({
+        necessary: true,
+        analytics: !!adsPersonalized,
+        adsPersonalized: !!adsPersonalized,
+      } as ConsentSnapshot);
 
+    setSnapshot(updated);
     alert("Préférences enregistrées.");
   };
 
+  const status =
+    snapshot?.adsPersonalized ? (
+      <span className="inline-flex items-center rounded-full bg-emerald-600/20 text-emerald-300 px-2 py-0.5 text-xs ring-1 ring-emerald-400/30">
+        Pubs personnalisées : ON
+      </span>
+    ) : (
+      <span className="inline-flex items-center rounded-full bg-white/10 text-white/70 px-2 py-0.5 text-xs ring-1 ring-white/20">
+        Pubs personnalisées : OFF
+      </span>
+    );
+
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Préférences cookies</h2>
+        {status}
+      </div>
+
       <div className="rounded-lg border border-white/10 bg-black/40 p-4">
-        <div className="flex items-center gap-3">
+        <label className="flex items-center gap-3">
           <input
-            id="ads-personalized"
-            name="ads-personalized"
             type="checkbox"
             checked={adsPersonalized}
             onChange={(e) => setAdsPersonalized(e.target.checked)}
             className="size-4"
           />
-        <label htmlFor="ads-personalized" className="text-sm">
+          <span className="text-sm">
             Autoriser les <strong>publicités personnalisées</strong>.{" "}
-            <span className="text-white/70">
-              Sans cela, vous verrez des publicités non personnalisées.
-            </span>
-          </label>
-        </div>
-
+            Sans cela, vous verrez des publicités non personnalisées.
+          </span>
+        </label>
         <p className="mt-2 text-xs text-white/70">
           Vous pouvez changer d’avis à tout moment sur cette page.
         </p>
@@ -63,7 +84,7 @@ export default function CookiePrefs() {
 
           <button
             type="button"
-            onClick={openConsentBanner}
+            onClick={() => window.dispatchEvent(new Event("cookie:open"))}
             className="text-sm text-white/80 underline underline-offset-2 hover:text-white"
           >
             Ouvrir le bandeau
@@ -72,11 +93,14 @@ export default function CookiePrefs() {
       </div>
 
       <div className="prose prose-invert max-w-none">
-        <h2>Rappels</h2>
+        <h3>Rappels</h3>
         <ul>
           <li>Les cookies essentiels au fonctionnement du site sont toujours actifs.</li>
-          <li>Vous pouvez décider d’activer ou non les publicités personnalisées.</li>
-          <li>En l’absence de consentement, des publicités non personnalisées peuvent s’afficher.</li>
+          <li>Vous pouvez activer/désactiver les publicités personnalisées ici.</li>
+          <li>
+            Sans consentement, des publicités <em>non personnalisées</em> peuvent
+            s’afficher.
+          </li>
         </ul>
       </div>
     </div>

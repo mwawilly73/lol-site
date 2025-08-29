@@ -2,6 +2,7 @@
 import type { Metadata } from "next";
 import HeroRotator from "@/components/HeroRotator";
 import GameCard from "@/components/GameCard";
+import AdSlot from "@/components/AdSlot";
 
 export const metadata: Metadata = {
   title: "LoL Quiz — Accueil",
@@ -103,6 +104,7 @@ export default function HomePage() {
                   Reste connecté, ça arrive très vite 👀
                 </p>
               </div>
+
               <div className="absolute inset-0 opacity-[.06] pointer-events-none">
                 <div className="absolute -right-10 -bottom-10 size-40 rounded-full bg-gradient-to-tr from-indigo-500 to-teal-400 blur-2xl" />
                 <div className="absolute -left-16 -top-12 size-36 rounded-full bg-gradient-to-tr from-pink-500 to-purple-500 blur-2xl" />
@@ -111,6 +113,7 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
     </>
   );
 }
