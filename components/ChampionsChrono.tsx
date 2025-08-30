@@ -138,7 +138,7 @@ export default function ChampionsChrono({
 }) {
   const total = targetTotal ?? initialChampions.length;
 
-  // Ordre unique + shuffle
+  // Ordre unique + shuffle une fois
   const order = useMemo(() => {
     const uniq = new Map<string, ChampionMeta>();
     for (const c of initialChampions) if (c?.id) uniq.set(c.id, c);
@@ -178,6 +178,12 @@ export default function ChampionsChrono({
   const [splashUrl, setSplashUrl] = useState<string>("");
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // FIN DE PARTIE (modal)
+  const [endModal, setEndModal] = useState<{
+    title: string;
+    message: string;
+  } | null>(null);
 
   // Charger la map des skins une fois
   useEffect(() => {
@@ -253,7 +259,8 @@ export default function ChampionsChrono({
     if (!started) { setSplashUrl(""); return; }
     setSplashUrl(`${DDRAGON_SPLASH}/${currentChampion.id}_0.jpg`);
     if (useSkin && skinsLoaded) setSplashUrl(buildSplashUrl(currentChampion.id, true));
-  }, [currentChampion?.id, useSkin, skinsLoaded, started]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentChampion?.id, useSkin, skinsLoaded, started]);
 
   // Démarrage / Pause / Stop
   const start = useCallback(() => {
@@ -265,6 +272,7 @@ export default function ChampionsChrono({
     setLettersShown(0);
     setStreak(0);
     setSolved(0);
+    setEndModal(null);
     setFocusHalo(true);
     setMs(mode === "chrono" ? CHRONO_START_MS : 0);
     setTimeout(() => inputRef.current?.focus(), 0);
@@ -291,9 +299,14 @@ export default function ChampionsChrono({
         if (mode === "libre") return t + 100;
         const next = t - 100;
         if (next <= 0) {
+          // Fin chrono → modal + stop
           setStarted(false);
           setPaused(false);
           if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+          setEndModal({
+            title: "⏱ Temps écoulé !",
+            message: `En 1 min 30 s, tu as trouvé ${solved} champions sur ${order.length}.`,
+          });
           return 0;
         }
         return next;
@@ -303,13 +316,18 @@ export default function ChampionsChrono({
     return () => {
       if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
     };
-  }, [started, paused, mode]);
+  }, [started, paused, mode, solved, order.length]);
 
+  // Fin libre → modal
   useEffect(() => {
     if (mode === "libre" && started && idx >= order.length) {
       stop();
+      setEndModal({
+        title: "🎉 Terminé !",
+        message: `Félicitations, tu as trouvé tous les champions en ${formatTime(ms)}.`,
+      });
     }
-  }, [idx, order.length, started, stop, mode]);
+  }, [idx, order.length, started, stop, mode, ms]);
 
   function formatTime(t: number) {
     const val = mode === "chrono" ? Math.max(0, t) : t;
@@ -410,7 +428,7 @@ export default function ChampionsChrono({
           {/* Gauche */}
           <div className="flex items-center gap-3 sm:gap-4">
             {/* Mode (switch) */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <span className="text-white/80 text-xs sm:text-sm">Mode :</span>
               <SwitchButton
                 on={mode === "chrono"}
@@ -420,16 +438,21 @@ export default function ChampionsChrono({
                   setMs(toChrono ? CHRONO_START_MS : 0);
                   setStarted(false);
                   setPaused(false);
+                  setEndModal(null);
                 }}
                 ariaLabel="Basculer le mode (Chrono/Libre)"
               />
-              <span className="inline-block w-16 text-center text-xs sm:text-sm font-medium">
+              <span
+                className={`ml-1 inline-block w-12 text-center text-xs sm:text-sm font-semibold ${
+                  mode === "chrono" ? "text-emerald-300" : "text-rose-300"
+                }`}
+              >
                 {mode === "chrono" ? "Chrono" : "Libre"}
               </span>
             </div>
 
             {/* Skin (switch) */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <span className="text-white/80 text-xs sm:text-sm">Skin :</span>
               <SwitchButton
                 on={useSkin}
@@ -438,7 +461,11 @@ export default function ChampionsChrono({
                 onColor="bg-green-500/90 border-green-400/80"
                 offColor="bg-zinc-600/90 border-zinc-500/80"
               />
-              <span className="inline-block w-16 text-center text-xs sm:text-sm font-medium">
+              <span
+                className={`ml-1 inline-block w-10 text-center text-xs sm:text-sm font-semibold ${
+                  useSkin ? "text-emerald-300" : "text-zinc-300"
+                }`}
+              >
                 {useSkin ? "Oui" : "Non"}
               </span>
             </div>
@@ -467,8 +494,8 @@ export default function ChampionsChrono({
             </div>
           </div>
 
-          {/* Droite */}
-          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          {/* Droite — desktop/tablette uniquement (HIDE en mobile) */}
+          <div className="ml-auto hidden md:flex items-center gap-2 sm:gap-3">
             {!started ? (
               <button
                 type="button"
@@ -567,7 +594,7 @@ export default function ChampionsChrono({
         </span>
       </div>
 
-      {/* Zone image / placeholder (inchangée) */}
+      {/* Zone image / placeholder */}
       <div className="relative w-full max-w-full overflow-hidden rounded-xl ring-1 ring-white/10 bg-black/40">
         <div className="relative mx-auto aspect-[1215/717] w-full">
           {!started ? (
@@ -606,6 +633,8 @@ export default function ChampionsChrono({
               <span>Chargement…</span>
             </div>
           )}
+
+          {/* Canvas confettis */}
           <canvas ref={canvasRef} className="pointer-events-none absolute inset-0" aria-hidden />
         </div>
       </div>
@@ -658,28 +687,40 @@ export default function ChampionsChrono({
         </div>
       </form>
 
-      {/* Fin de run */}
-      {(!started && (mode === "chrono" ? ms === 0 : idx >= order.length)) && (
-        <div className="rounded-lg border border-white/10 bg-white/5 p-4 text-center">
-          <div className="text-base sm:text-lg font-semibold">
-            {mode === "chrono" ? "Temps écoulé !" : "Terminé !"} {solved} / {order.length} en{" "}
-            {mode === "chrono" ? "1:30.0" : formatTime(ms)} 🎉
-          </div>
-          <div className="mt-2 flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={start}
-              className="rounded-md bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-white font-semibold"
-            >
-              Rejouer
-            </button>
-            <button
-              type="button"
-              onClick={onShare}
-              className="rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 px-3 py-1.5"
-            >
-              Partager
-            </button>
+      {/* Bandeau de fin (modal centré) */}
+      {endModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setEndModal(null)}
+            aria-hidden
+          />
+          <div className="relative z-10 w-[min(92vw,560px)] rounded-2xl border border-white/10 bg-zinc-900/95 p-6 text-center shadow-2xl">
+            <div className="text-xl font-bold text-white mb-1">{endModal.title}</div>
+            <div className="text-white/90">{endModal.message}</div>
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => setEndModal(null)}
+                className="rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 px-4 py-2 text-sm"
+              >
+                Fermer
+              </button>
+              <button
+                type="button"
+                onClick={start}
+                className="rounded-md bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Rejouer
+              </button>
+              <button
+                type="button"
+                onClick={onShare}
+                className="rounded-md bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Partager
+              </button>
+            </div>
           </div>
         </div>
       )}
