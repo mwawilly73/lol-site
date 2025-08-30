@@ -1,71 +1,106 @@
 // lib/fuzzy.ts
-// Normalisation FR (accents), alias champions usuels, fuzzy-match léger (distance ≤ 1)
+// Normalisation FR stricte, alias explicites + fautes usuelles,
+// Levenshtein, et helpers pour comparer un input à UN champion.
+//
+// Utilisé par le mode Chrono, et compatible avec le style de ton “liste des champions”.
 
-export function normalizeName(s: string): string {
+export type FuzzyChampion = { id: string; name: string };
+
+/* ------------------------------ Utils ------------------------------ */
+export function norm(s: string): string {
   return s
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")      // accents
+    .replace(/['’`´^~\-_.\s]/g, "")       // ponctuation douce & espaces
+    .replace(/[^a-z0-9]/g, "");           // sécurité
 }
 
-// Aliases usuels → canonical
-const ALIASES_RAW: Record<string, string[]> = {
-  AurelionSol: ["asol", "aurelion", "aurelionsol"],
-  ChoGath: ["chogath", "cho", "choghat"],
-  KhaZix: ["khazix", "khaz", "k6"],
-  LeBlanc: ["leblanc", "lb"],
-  VelKoz: ["velkoz", "velkoze"],
-  KogMaw: ["kogmaw", "kog"],
-  RekSai: ["reksai", "reksay"],
-  Wukong: ["monkeyking", "wu", "wukong"],
-  DrMundo: ["drmundo", "mundo"],
-  Nunu: ["nunu", "nunuetwillump", "nunuwillump", "nunu&willump"],
-  JarvanIV: ["jarvan", "j4"],
-  TwistedFate: ["tf", "twisted"],
-  MissFortune: ["mf"],
-  TahmKench: ["tahm", "kench", "tahmkench"],
+export function lev(a: string, b: string): number {
+  if (a === b) return 0;
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    const ai = a[i - 1];
+    for (let j = 1; j <= n; j++) {
+      const cost = ai === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,     // delete
+        dp[i][j - 1] + 1,     // insert
+        dp[i - 1][j - 1] + cost // replace
+      );
+    }
+  }
+  return dp[m][n];
+}
+
+/* ------------------------- Alias explicites ------------------------ */
+// alias -> canon normalisé (ex: "monkeyking" => "wukong")
+const EXPLICIT_ALIASES: Record<string, string> = {
+  monkeyking: "wukong",
+  wukong: "wukong",
+  maitreyi: "masteryi",
+  masteryi: "masteryi",
+  jarvan: "jarvaniv",
+  jarvan4: "jarvaniv",
+  jarvaniv: "jarvaniv",
+  leblanc: "leblanc",
+  ksante: "ksante",
 };
 
-const aliasMap = new Map<string, string>(); // normalized alias -> canonical
-for (const [canon, list] of Object.entries(ALIASES_RAW)) {
-  aliasMap.set(normalizeName(canon), canon);
-  for (const a of list) aliasMap.set(normalizeName(a), canon);
+// fautes fréquentes par canon normalisé
+const SPECIAL_ALIASES_BY_CANON: Record<string, string[]> = {
+  shyvana: ["shivana", "shyvanna", "shivanna", "shyvana"],
+  qiyana: ["qiana", "quiana", "kiyana", "kiana", "qiyanna", "qyiana"],
+  taliyah: ["talia", "taliya", "talya", "talyah"],
+  tryndamere: ["trindamer", "trindamere", "trynda", "trynd", "tryndam"],
+  xinzhao: ["xinzao", "xinzaho"],
+  tahmkench: ["tahmken", "tamkench", "tahmkenh", "tahmkench"],
+  kassadin: ["kasadin"],
+  katarina: ["katarena", "katarine"],
+  velkoz: ["velcoz", "velkoz"],
+};
+
+/* ---------------------- Clés par champion -------------------------- */
+export function aliasKeysForChampion(c: FuzzyChampion): string[] {
+  const keys = new Set<string>();
+  const nName = norm(c.name);
+  if (nName) keys.add(nName);
+
+  // mots (évite d louper "Miss Fortune", "Lee Sin", etc.)
+  (c.name || "")
+    .split(/[^A-Za-z0-9]+/g)
+    .map((t) => norm(t))
+    .filter((t) => t && t.length >= 3)
+    .forEach((t) => keys.add(t));
+
+  // équivalences explicites
+  if (EXPLICIT_ALIASES[nName]) keys.add(EXPLICIT_ALIASES[nName]);
+  if (nName === "jarvaniv") { keys.add("jarvan"); keys.add("jarvan4"); }
+  if (nName === "masteryi") keys.add("maitreyi");
+  if (nName === "wukong") keys.add("monkeyking");
+
+  // fautes fréquentes
+  const extras = SPECIAL_ALIASES_BY_CANON[nName];
+  if (extras) extras.forEach((a) => keys.add(a));
+
+  return Array.from(keys);
 }
 
-export function resolveAlias(input: string): string {
-  const norm = normalizeName(input);
-  return aliasMap.get(norm) ?? input;
-}
+/* ----------------------- Comparaison unique ------------------------ */
+// true si l'input correspond au champion c (exact, alias ou lev <= 1)
+export function goodGuess(input: string, c: FuzzyChampion): boolean {
+  const nIn = norm(input);
+  if (!nIn) return false;
 
-// Levenshtein distance (early-exit > max)
-export function levenshtein(a: string, b: string, max = 1): number {
-  if (a === b) return 0;
-  const la = a.length, lb = b.length;
-  if (Math.abs(la - lb) > max) return max + 1;
-
-  const dp = new Array(lb + 1);
-  for (let j = 0; j <= lb; j++) dp[j] = j;
-
-  for (let i = 1; i <= la; i++) {
-    let prev = dp[0];
-    dp[0] = i;
-    let minRow = dp[0];
-    for (let j = 1; j <= lb; j++) {
-      const temp = dp[j];
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + cost);
-      prev = temp;
-      if (dp[j] < minRow) minRow = dp[j];
-    }
-    if (minRow > max) return max + 1;
+  const keys = aliasKeysForChampion(c);
+  for (const k of keys) {
+    if (nIn === k) return true;        // exact après normalisation
+    if (lev(nIn, k) <= 1) return true; // petite faute tolérée
   }
-  return dp[lb];
-}
-
-export function fuzzyEq(a: string, b: string): boolean {
-  const A = normalizeName(resolveAlias(a));
-  const B = normalizeName(resolveAlias(b));
-  if (A === B) return true;
-  return levenshtein(A, B, 1) <= 1; // tolère 1 faute
+  return false;
 }

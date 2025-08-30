@@ -28,7 +28,7 @@ export default async function ChampionsChronoPage() {
 
   return (
     <section className="space-y-6 container-lg">
-      <ChampionsChrono champions={champions} />
+      <ChampionsChrono initialChampions={champions} targetTotal={champions.length} />
     </section>
   );
 }

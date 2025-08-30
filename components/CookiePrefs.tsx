@@ -2,74 +2,47 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  readConsentClient,
-  saveConsent,
-  type ConsentSnapshot,
-} from "@/lib/consent";
+import { readConsentClient, saveConsent } from "@/lib/consent";
 
 export default function CookiePrefs() {
   const [mounted, setMounted] = useState(false);
   const [adsPersonalized, setAdsPersonalized] = useState(false);
-  const [snapshot, setSnapshot] = useState<ConsentSnapshot | null>(null);
 
   useEffect(() => {
     setMounted(true);
     const saved = readConsentClient();
-    if (saved) {
-      setSnapshot(saved);
-      setAdsPersonalized(!!saved.adsPersonalized);
-    }
+    if (saved) setAdsPersonalized(!!saved.adsPersonalized);
   }, []);
 
   if (!mounted) return null;
 
   const onSave = () => {
-    // Si pubs perso activées → "all" (analytics = ON) ; sinon → "necessary".
-    const updated =
-      saveConsent(adsPersonalized ? "all" : "necessary", adsPersonalized) ??
-      ({
-        necessary: true,
-        analytics: !!adsPersonalized,
-        adsPersonalized: !!adsPersonalized,
-      } as ConsentSnapshot);
-
-    setSnapshot(updated);
+    // S’il active la personnalisation → "all", sinon "necessary"
+    saveConsent(adsPersonalized ? "all" : "necessary", adsPersonalized);
     alert("Préférences enregistrées.");
   };
 
-  const status =
-    snapshot?.adsPersonalized ? (
-      <span className="inline-flex items-center rounded-full bg-emerald-600/20 text-emerald-300 px-2 py-0.5 text-xs ring-1 ring-emerald-400/30">
-        Pubs personnalisées : ON
-      </span>
-    ) : (
-      <span className="inline-flex items-center rounded-full bg-white/10 text-white/70 px-2 py-0.5 text-xs ring-1 ring-white/20">
-        Pubs personnalisées : OFF
-      </span>
-    );
-
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Préférences cookies</h2>
-        {status}
-      </div>
-
       <div className="rounded-lg border border-white/10 bg-black/40 p-4">
-        <label className="flex items-center gap-3">
+        {/* Associe le label au champ via htmlFor/id et ajoute name */}
+        <div className="flex items-center gap-3">
           <input
             type="checkbox"
+            id="ads-personalized"              // ✅ id ajouté
+            name="adsPersonalized"             // ✅ name ajouté (utile pour autofill/form)
             checked={adsPersonalized}
             onChange={(e) => setAdsPersonalized(e.target.checked)}
             className="size-4"
+            aria-describedby="ads-personalized-help"
           />
-          <span className="text-sm">
-            Autoriser les <strong>publicités personnalisées</strong>.{" "}
-            Sans cela, vous verrez des publicités non personnalisées.
-          </span>
-        </label>
-        <p className="mt-2 text-xs text-white/70">
+          <label htmlFor="ads-personalized" className="text-sm">
+            Autoriser les <strong>publicités personnalisées</strong>.
+            {` `}Sans cela, vous verrez des publicités non personnalisées.
+          </label>
+        </div>
+
+        <p id="ads-personalized-help" className="mt-2 text-xs text-white/70">
           Vous pouvez changer d’avis à tout moment sur cette page.
         </p>
 
@@ -93,14 +66,11 @@ export default function CookiePrefs() {
       </div>
 
       <div className="prose prose-invert max-w-none">
-        <h3>Rappels</h3>
+        <h2>Rappels</h2>
         <ul>
           <li>Les cookies essentiels au fonctionnement du site sont toujours actifs.</li>
-          <li>Vous pouvez activer/désactiver les publicités personnalisées ici.</li>
-          <li>
-            Sans consentement, des publicités <em>non personnalisées</em> peuvent
-            s’afficher.
-          </li>
+          <li>Vous pouvez décider d’activer ou non les publicités personnalisées.</li>
+          <li>Sans consentement, seules des pubs non personnalisées peuvent s’afficher.</li>
         </ul>
       </div>
     </div>
