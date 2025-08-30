@@ -96,6 +96,36 @@ function countLetters(name: string) {
   return (name.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || []).length;
 }
 
+/* ========================= Switch visuel ========================= */
+function SwitchButton({
+  on, onToggle, ariaLabel,
+  onColor = "bg-green-500/90 border-green-400/80",
+  offColor = "bg-rose-500/90 border-rose-400/80",
+  className = "",
+}: {
+  on: boolean; onToggle: () => void; ariaLabel: string;
+  onColor?: string; offColor?: string; className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={`relative inline-flex h-7 w-14 sm:h-8 sm:w-16 items-center rounded-full border transition-colors duration-300 focus:outline-none ${
+        on ? onColor : offColor
+      } ${className}`}
+      role="switch"
+      aria-checked={on}
+      aria-label={ariaLabel}
+    >
+      <span
+        className={`absolute left-1 top-1 bg-white rounded-full shadow-md transform transition-transform duration-300
+        h-5 w-5 sm:h-6 sm:w-6 ${on ? "translate-x-7 sm:translate-x-8" : ""}`}
+      />
+      <span className="sr-only">{ariaLabel}</span>
+    </button>
+  );
+}
+
 /* -------------------------- Composant --------------------------- */
 type GameMode = "libre" | "chrono";
 
@@ -108,7 +138,7 @@ export default function ChampionsChrono({
 }) {
   const total = targetTotal ?? initialChampions.length;
 
-  // Ordre unique + shuffle une fois (pas de doublons pendant la run)
+  // Ordre unique + shuffle
   const order = useMemo(() => {
     const uniq = new Map<string, ChampionMeta>();
     for (const c of initialChampions) if (c?.id) uniq.set(c.id, c);
@@ -120,15 +150,15 @@ export default function ChampionsChrono({
     return arr.slice(0, total);
   }, [initialChampions, total]);
 
-  // ⏱️ Par défaut : Chrono + Skin ON
+  // Par défaut : Chrono + Skin ON
   const [mode, setMode] = useState<GameMode>("chrono");
   const [useSkin, setUseSkin] = useState<boolean>(true);
 
   const [started, setStarted] = useState(false);
-  const [paused, setPaused] = useState(false); // seulement pour "libre"
+  const [paused, setPaused] = useState(false); // seulement “libre”
 
   const CHRONO_START_MS = 90_000;
-  const [ms, setMs] = useState(CHRONO_START_MS); // par défaut chrono → temps restant
+  const [ms, setMs] = useState(CHRONO_START_MS);
 
   const timerRef = useRef<number | null>(null);
 
@@ -312,7 +342,7 @@ export default function ChampionsChrono({
     [currentChampion]
   );
 
-  const acceptCorrect = useCallback(() => {
+  const burstAndNext = useCallback(() => {
     setSolved((s) => s + 1);
     setStreak((st) => st + 1);
     setInput("");
@@ -326,10 +356,10 @@ export default function ChampionsChrono({
     (e: React.FormEvent) => {
       e.preventDefault();
       if (!currentChampion) return;
-      if (validateInput(input)) acceptCorrect();
+      if (validateInput(input)) burstAndNext();
       else setStreak(0);
     },
-    [input, currentChampion, acceptCorrect, validateInput]
+    [input, currentChampion, burstAndNext, validateInput]
   );
 
   const onReveal = useCallback(() => {
@@ -357,10 +387,8 @@ export default function ChampionsChrono({
       : currentChampion?.name.replace(/[A-Za-zÀ-ÖØ-öø-ÿ]/g, "•");
 
   const isFirstImage = started && idx === 0;
-  const timerWidth = "min-w-[112px] sm:min-w-[128px] lg:min-w-[144px]";
-  const ctaWidth = "min-w-[112px] sm:min-w-[128px]";
 
-  /* ------ % barre visuelle haut (chrono: temps restant, libre: progression) ------ */
+  /* ------ % barre visuelle (chrono: temps restant, libre: progression) ------ */
   const progressPercent =
     mode === "chrono"
       ? (ms / CHRONO_START_MS) * 100
@@ -368,102 +396,116 @@ export default function ChampionsChrono({
       ? (solved / order.length) * 100
       : 0;
 
-  /* ---------------------- UI Toggles (segmentés) ---------------------- */
-  const ModeToggle = (
-    <div className="flex items-center gap-2">
-      <span className="text-white/80 text-xs sm:text-sm">Mode :</span>
-      <div
-        role="tablist"
-        aria-label="Choisir le mode"
-        className="flex overflow-hidden rounded-full ring-1 ring-white/15 bg-white/5"
-      >
-        <button
-          role="tab"
-          aria-selected={mode === "chrono"}
-          onClick={() => {
-            setMode("chrono");
-            setMs(CHRONO_START_MS);
-            setStarted(false);
-            setPaused(false);
-          }}
-          className={`px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold transition
-            ${mode === "chrono" ? "bg-emerald-500 text-black" : "text-white/80 hover:bg-white/10"}`}
-        >
-          Chrono
-        </button>
-        <button
-          role="tab"
-          aria-selected={mode === "libre"}
-          onClick={() => {
-            setMode("libre");
-            setMs(0);
-            setStarted(false);
-            setPaused(false);
-          }}
-          className={`px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold transition
-            ${mode === "libre" ? "bg-zinc-600 text-white" : "text-white/80 hover:bg-white/10"}`}
-        >
-          Libre
-        </button>
-      </div>
-    </div>
-  );
-
-  const SkinToggle = (
-    <div className="flex items-center gap-2">
-      <span className="text-white/80 text-xs sm:text-sm">Skin :</span>
-      <div
-        role="tablist"
-        aria-label="Activer les skins"
-        className="flex overflow-hidden rounded-full ring-1 ring-white/15 bg-white/5"
-      >
-        <button
-          role="tab"
-          aria-selected={useSkin}
-          onClick={() => setUseSkin(true)}
-          className={`px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold transition
-            ${useSkin ? "bg-emerald-500 text-black" : "text-white/80 hover:bg-white/10"}`}
-        >
-          Oui
-        </button>
-        <button
-          role="tab"
-          aria-selected={!useSkin}
-          onClick={() => setUseSkin(false)}
-          className={`px-3 sm:px-4 py-1.5 text-xs sm:text-sm font-semibold transition
-            ${!useSkin ? "bg-zinc-600 text-white" : "text-white/80 hover:bg-white/10"}`}
-        >
-          Non
-        </button>
-      </div>
-    </div>
-  );
+  /* ======================= BARRE D’INFOS (switchs + responsive) ======================= */
+  const timerWidth = "min-w-[118px] sm:min-w-[128px] lg:min-w-[144px]";
+  const ctaWidth = "min-w-[118px] sm:min-w-[128px]";
 
   return (
-    <div className="space-y-4 sm:space-y-5">
-      {/* Barre d’infos */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[13px] sm:text-sm">
-        {/* Toggles côte à côte */}
-        <div className="flex items-center gap-3 sm:gap-4">
-          {ModeToggle}
-          {SkinToggle}
+    <div className="space-y-4 sm:space-y-5 overflow-x-hidden">
+      {/* Ligne(s) de commandes */}
+      <div className="flex flex-col gap-2 sm:gap-3 max-w-full">
+        {/* Desktop: (gauche) Mode+Skin+Partager | (centre) Timer/Score/Série | (droite) Démarrer/Pause
+            Mobile: L1 Mode+Skin, L2 Timer+Score+Partager, L3 Démarrer/Pause+Série */}
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full">
+          {/* Gauche */}
+          <div className="flex items-center gap-3 sm:gap-4">
+            {/* Mode (switch) */}
+            <div className="flex items-center gap-2">
+              <span className="text-white/80 text-xs sm:text-sm">Mode :</span>
+              <SwitchButton
+                on={mode === "chrono"}
+                onToggle={() => {
+                  const toChrono = !(mode === "chrono");
+                  setMode(toChrono ? "chrono" : "libre");
+                  setMs(toChrono ? CHRONO_START_MS : 0);
+                  setStarted(false);
+                  setPaused(false);
+                }}
+                ariaLabel="Basculer le mode (Chrono/Libre)"
+              />
+              <span className="inline-block w-16 text-center text-xs sm:text-sm font-medium">
+                {mode === "chrono" ? "Chrono" : "Libre"}
+              </span>
+            </div>
+
+            {/* Skin (switch) */}
+            <div className="flex items-center gap-2">
+              <span className="text-white/80 text-xs sm:text-sm">Skin :</span>
+              <SwitchButton
+                on={useSkin}
+                onToggle={() => setUseSkin((v) => !v)}
+                ariaLabel="Activer les skins"
+                onColor="bg-green-500/90 border-green-400/80"
+                offColor="bg-zinc-600/90 border-zinc-500/80"
+              />
+              <span className="inline-block w-16 text-center text-xs sm:text-sm font-medium">
+                {useSkin ? "Oui" : "Non"}
+              </span>
+            </div>
+
+            {/* Partager : desktop à gauche */}
+            <button
+              type="button"
+              onClick={onShare}
+              className="hidden md:inline-flex rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 px-3 py-1.5"
+              title="Partager mon score"
+            >
+              Partager
+            </button>
+          </div>
+
+          {/* Milieu (centré) — desktop only */}
+          <div className="hidden md:flex flex-1 items-center justify-center gap-3">
+            <div className={`rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1 font-mono tabular-nums text-center ${timerWidth}`}>
+              ⏱ {formatTime(ms)}
+            </div>
+            <div className="rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1">
+              Score : <span className="font-semibold">{solved}</span> / {order.length}
+            </div>
+            <div className="rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1">
+              Série : <span className="font-semibold">{streak}</span>
+            </div>
+          </div>
+
+          {/* Droite */}
+          <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            {!started ? (
+              <button
+                type="button"
+                onClick={start}
+                className={`rounded-md bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-white font-semibold ${ctaWidth}`}
+              >
+                Démarrer
+              </button>
+            ) : mode === "libre" ? (
+              <button
+                type="button"
+                onClick={togglePause}
+                className={`rounded-md ${paused ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "bg-white/10 hover:bg-white/15 ring-1 ring-white/15"} px-3 py-1.5 font-semibold ${ctaWidth}`}
+              >
+                {paused ? "Reprendre" : "Pause"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className={`rounded-md bg-white/10 ring-1 ring-white/15 px-3 py-1.5 opacity-60 ${ctaWidth}`}
+                title="Pas de pause en mode chrono"
+              >
+                Chrono en cours
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Timer / Score / Série */}
-        <div className="flex items-center gap-2 sm:gap-3 ml-auto sm:ml-4">
+        {/* Mobile L2: ⏱ + Score + Partager */}
+        <div className="md:hidden flex flex-wrap items-center justify-center gap-2 w-full">
           <div className={`rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1 font-mono tabular-nums text-center ${timerWidth}`}>
-            {formatTime(ms)}
+            ⏱ {formatTime(ms)}
           </div>
           <div className="rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1">
             Score : <span className="font-semibold">{solved}</span> / {order.length}
           </div>
-          <div className="rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1">
-            Série : <span className="font-semibold">{streak}</span>
-          </div>
-        </div>
-
-        {/* Actions à droite */}
-        <div className="flex items-center gap-2 sm:gap-3 ml-auto">
           <button
             type="button"
             onClick={onShare}
@@ -472,7 +514,10 @@ export default function ChampionsChrono({
           >
             Partager
           </button>
+        </div>
 
+        {/* Mobile L3: Démarrer/Pause + Série */}
+        <div className="md:hidden flex items-center justify-center gap-2 w-full">
           {!started ? (
             <button
               type="button"
@@ -499,6 +544,10 @@ export default function ChampionsChrono({
               Chrono en cours
             </button>
           )}
+
+          <div className="rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1">
+            Série : <span className="font-semibold">{streak}</span>
+          </div>
         </div>
       </div>
 
@@ -518,14 +567,12 @@ export default function ChampionsChrono({
         </span>
       </div>
 
-      {/* Zone image / placeholder */}
+      {/* Zone image / placeholder (inchangée) */}
       <div className="relative w-full max-w-full overflow-hidden rounded-xl ring-1 ring-white/10 bg-black/40">
         <div className="relative mx-auto aspect-[1215/717] w-full">
-          {/* Avant démarrage : carte statique pleine surface */}
           {!started ? (
             <>
               <div className="absolute inset-0 rounded-xl">
-                {/* sobre + statique */}
                 <div className="absolute inset-0 rounded-xl bg-[radial-gradient(120%_80%_at_50%_0%,rgba(99,102,241,0.20),rgba(16,185,129,0.18)_40%,rgba(0,0,0,0.55)_75%)]" />
                 <div className="absolute inset-6 rounded-xl bg-gradient-to-br from-white/10 via-white/5 to-transparent ring-1 ring-white/10" />
               </div>
@@ -559,8 +606,6 @@ export default function ChampionsChrono({
               <span>Chargement…</span>
             </div>
           )}
-
-          {/* Canvas confettis */}
           <canvas ref={canvasRef} className="pointer-events-none absolute inset-0" aria-hidden />
         </div>
       </div>
@@ -570,7 +615,7 @@ export default function ChampionsChrono({
         {started && currentChampion ? maskedName : "—"}
       </div>
 
-      {/* Formulaire (validation via bouton/Entrée) */}
+      {/* Formulaire */}
       <form
         onSubmit={onSubmit}
         className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"

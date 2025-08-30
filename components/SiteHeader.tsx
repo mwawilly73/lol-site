@@ -3,7 +3,7 @@
 // - Ferme au clic sur le backdrop et à Échap.
 // - Focus management : ouverture → focus 1er lien ; fermeture → focus burger.
 // - Quand le panneau est FERMÉ → hidden + inert (empêche le focus).
-// - Pas d'opacity sur le header (fond opaque), pas de "any".
+// - Dropdown “Jeux” : même apparence que les autres boutons, accessible, desktop & mobile.
 
 "use client";
 
@@ -40,13 +40,26 @@ function NavLink({
 }
 
 export default function SiteHeader() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  // Dropdown “Jeux”
+  const [openGamesDesktop, setOpenGamesDesktop] = useState(false);
+  const [openGamesMobile, setOpenGamesMobile] = useState(false);
+  const gamesDesktopRef = useRef<HTMLDivElement | null>(null);
+  const firstGamesLinkRef = useRef<HTMLAnchorElement | null>(null);
 
   const burgerRef = useRef<HTMLButtonElement | null>(null);
   const firstLinkRef = useRef<HTMLAnchorElement | null>(null);
   const mobilePanelRef = useRef<HTMLDivElement | null>(null);
 
-  // Empêche le scroll du body quand le menu est ouvert + focus 1er lien
+  const isInGames = pathname.startsWith("/games");
+
+  const jeuxBtnClass = `block rounded-lg px-4 py-2 text-sm md:text-base transition-colors ${
+    isInGames ? "bg-white/15 text-white" : "text-white/90 hover:text-white hover:bg-white/10"
+  }`;
+
+  /* ---------- Effets : body scroll / inert / focus (burger panel) ---------- */
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -58,7 +71,6 @@ export default function SiteHeader() {
     };
   }, [open]);
 
-  // Applique/retire l'attribut inert au panneau quand fermé (évite TypeScript sur JSX)
   useEffect(() => {
     const panel = mobilePanelRef.current;
     if (!panel) return;
@@ -71,7 +83,6 @@ export default function SiteHeader() {
     }
   }, [open]);
 
-  // Si on ferme alors qu’un élément du panel avait le focus → blur + retour focus burger
   useEffect(() => {
     if (open) return;
     const panel = mobilePanelRef.current;
@@ -85,7 +96,7 @@ export default function SiteHeader() {
     }
   }, [open]);
 
-  // Échap pour fermer
+  // ESC pour fermer burger
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -94,6 +105,32 @@ export default function SiteHeader() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
+
+  /* ---------- Dropdown “Jeux” (desktop) : click extérieur + ESC + focus ---------- */
+  useEffect(() => {
+    if (!openGamesDesktop) return;
+
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (!gamesDesktopRef.current?.contains(target)) {
+        setOpenGamesDesktop(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenGamesDesktop(false);
+    };
+
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    const t = window.setTimeout(() => firstGamesLinkRef.current?.focus(), 0);
+
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+      window.clearTimeout(t);
+    };
+  }, [openGamesDesktop]);
 
   return (
     <header className="w-full border-b border-white/10 bg-[#0e1117]">
@@ -106,7 +143,48 @@ export default function SiteHeader() {
         {/* Nav desktop */}
         <nav aria-label="Navigation principale" className="hidden md:flex items-center gap-1">
           <NavLink href="/">Accueil</NavLink>
-          <NavLink href="/games/champions">Jeu : Champions</NavLink>
+
+          {/* Jeux (dropdown desktop) */}
+          <div className="relative" ref={gamesDesktopRef}>
+            <button
+              type="button"
+              className={jeuxBtnClass}
+              aria-haspopup="menu"
+              aria-expanded={openGamesDesktop}
+              aria-controls="games-desktop-menu"
+              onClick={() => setOpenGamesDesktop((v) => !v)}
+            >
+              Jeux ▾
+            </button>
+
+            {openGamesDesktop && (
+              <div
+                id="games-desktop-menu"
+                role="menu"
+                aria-label="Jeux"
+                className="absolute left-0 mt-2 w-64 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl p-1 z-50"
+              >
+                <Link
+                  ref={firstGamesLinkRef}
+                  href="/games/champions"
+                  className="block rounded-md px-3 py-2 text-sm hover:bg-white/10"
+                  onClick={() => setOpenGamesDesktop(false)}
+                  role="menuitem"
+                >
+                  Liste des champions
+                </Link>
+                <Link
+                  href="/games/chrono"
+                  className="block rounded-md px-3 py-2 text-sm hover:bg-white/10"
+                  onClick={() => setOpenGamesDesktop(false)}
+                  role="menuitem"
+                >
+                  Chrono des champions
+                </Link>
+              </div>
+            )}
+          </div>
+
           <NavLink href="/a-propos">À propos</NavLink>
         </nav>
 
@@ -158,9 +236,52 @@ export default function SiteHeader() {
             <NavLink href="/" forwardedRef={firstLinkRef} onSelect={() => setOpen(false)}>
               Accueil
             </NavLink>
-            <NavLink href="/games/champions" onSelect={() => setOpen(false)}>
-              Jeu : Champions
-            </NavLink>
+
+            {/* Jeux (accordion mobile) */}
+            <div className="mt-1">
+              <button
+                type="button"
+                className={`w-full text-left ${jeuxBtnClass}`}
+                aria-haspopup="menu"
+                aria-expanded={openGamesMobile}
+                aria-controls="games-mobile-menu"
+                onClick={() => setOpenGamesMobile((v) => !v)}
+              >
+                Jeux ▾
+              </button>
+              {openGamesMobile && (
+                <div
+                  id="games-mobile-menu"
+                  role="menu"
+                  aria-label="Jeux"
+                  className="mt-1 space-y-1 px-1"
+                >
+                  <Link
+                    href="/games/champions"
+                    className="block rounded-md px-3 py-2 text-sm hover:bg-white/10"
+                    onClick={() => {
+                      setOpenGamesMobile(false);
+                      setOpen(false);
+                    }}
+                    role="menuitem"
+                  >
+                    Liste des champions
+                  </Link>
+                  <Link
+                    href="/games/chrono"
+                    className="block rounded-md px-3 py-2 text-sm hover:bg-white/10"
+                    onClick={() => {
+                      setOpenGamesMobile(false);
+                      setOpen(false);
+                    }}
+                    role="menuitem"
+                  >
+                    Chrono des champions
+                  </Link>
+                </div>
+              )}
+            </div>
+
             <NavLink href="/a-propos" onSelect={() => setOpen(false)}>
               À propos
             </NavLink>

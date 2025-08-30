@@ -18,7 +18,6 @@ export default function SiteFooter() {
             </div>
             <nav aria-label="Liens de pied de page" className="flex flex-wrap items-center gap-3">
               <Link className="hover:text-white transition-colors" href="/">Accueil</Link>
-              <Link className="hover:text-white transition-colors" href="/games/champions">Jeu : Champions</Link>
               <Link className="hover:text-white transition-colors" href="/legal/mentions-legales">Mentions légales</Link>
               <Link className="hover:text-white transition-colors" href="/legal/confidentialite">Confidentialité</Link>
               <Link className="hover:text-white transition-colors" href="/cookies">Cookies</Link>
