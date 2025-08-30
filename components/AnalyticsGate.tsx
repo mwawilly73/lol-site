@@ -2,17 +2,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { hasConsent } from "@/lib/consent";
+import { readConsentClient, subscribeConsent } from "@/lib/consent";
 
 export default function AnalyticsGate({ children }: { children: React.ReactNode }) {
-  const [allowed, setAllowed] = useState<boolean>(() => hasConsent("analytics"));
+  const [enabled, setEnabled] = useState(false);
 
   useEffect(() => {
-    const onChange = () => setAllowed(hasConsent("analytics"));
-    window.addEventListener("cookie-consent", onChange as EventListener);
-    return () => window.removeEventListener("cookie-consent", onChange as EventListener);
+    const c = readConsentClient();
+    setEnabled(!!c?.analytics);
+    const unsub = subscribeConsent((s) => setEnabled(!!s.analytics));
+    return () => unsub();
   }, []);
 
-  if (!allowed) return null;
+  if (!enabled) return null;
   return <>{children}</>;
 }

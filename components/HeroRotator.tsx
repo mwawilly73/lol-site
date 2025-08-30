@@ -102,7 +102,7 @@ export default function HeroRotator({
           alt=""
           fill
           sizes={SIZES}
-          quality={80}
+          quality={60}
           priority={priority}
           {...(loading ? { loading } : {})}   // ⬅️ on n’envoie pas loading si priority=true
           className="object-cover object-center"

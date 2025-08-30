@@ -84,13 +84,21 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6 cv-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
             <GameCard
               href="/games/champions"
               title="Liste des champions"
               subtitle="Devine les 171 champions de LoL"
               imageUrl={CHAMPIONS_CARD_BG}
             />
+
+            <GameCard
+              href="/games/champions/chrono"
+              title="Chrono 60s"
+              subtitle="Devine un max en 60s"
+              imageUrl="https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Zilean_6.jpg"
+            />
+
 
             {/* Placeholder pour futurs jeux */}
             <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 bg-white/5 p-6 flex items-center">

@@ -1,48 +1,28 @@
 // components/AdSenseAuto.tsx
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
-type Props = {
-  publisherId?: string | null; // ex: "ca-pub-XXXXXXXXXXXX"
-  /** réservé si tu ajoutes d’autres stratégies plus tard */
-  strategy?: "auto";
-};
+export default function AdSenseAuto() {
+  const pubId = process.env.NEXT_PUBLIC_ADSENSE_PUB_ID;
+  const loaded = useRef(false);
 
-type AdsByGoogleParams = Record<string, unknown>;
-type AdsByGoogleQueue = {
-  push: (params: AdsByGoogleParams) => void;
-  loaded?: boolean;
-} & AdsByGoogleParams[];
-
-declare global {
-  interface Window {
-    adsbygoogle?: AdsByGoogleQueue;
-  }
-}
-
-export default function AdSenseAuto({ publisherId, strategy = "auto" }: Props) {
   useEffect(() => {
-    if (!publisherId || strategy !== "auto") return;
-
-    // Évite les doublons
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[src^="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"]'
-    );
-    if (existing) return;
+    if (!pubId || loaded.current) return;
+    // Évite double-injection
+    if (document.querySelector('script[data-ad-client]')) {
+      loaded.current = true;
+      return;
+    }
 
     const s = document.createElement("script");
+    s.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js";
     s.async = true;
-    s.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${encodeURIComponent(
-      publisherId
-    )}`;
+    s.setAttribute("data-ad-client", pubId);
     s.crossOrigin = "anonymous";
     document.head.appendChild(s);
-
-    return () => {
-      // On garde le script si déjà chargé (évite rechargements) — rien à faire au cleanup.
-    };
-  }, [publisherId, strategy]);
+    loaded.current = true;
+  }, [pubId]);
 
   return null;
 }

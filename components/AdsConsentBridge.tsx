@@ -2,25 +2,44 @@
 "use client";
 
 import { useEffect } from "react";
-import { readConsentClient, subscribeConsent } from "@/lib/consent";
+import {
+  readConsentClient,
+  subscribeConsent,
+  type ConsentSnapshot,
+} from "@/lib/consent";
 
 /**
- * Expose l'état de consentement "pubs personnalisées" :
- * - ajoute/retire l’attribut data-ads-personalized sur <html>
- * - émet l’event "ads:consent-changed" { detail: { personalized: boolean } }
- * Tes futurs scripts/régies pourront lire l’attribut ou écouter l’event.
+ * Réplique le consentement pub dans l'attribut
+ * data-ads-personalized sur <html> (utile pour les slots).
  */
 export default function AdsConsentBridge() {
   useEffect(() => {
-    const apply = () => {
-      const personalized = !!readConsentClient()?.adsPersonalized;
-      document.documentElement.toggleAttribute("data-ads-personalized", personalized);
-      window.dispatchEvent(
-        new CustomEvent("ads:consent-changed", { detail: { personalized } })
-      );
+    const root = document.documentElement;
+
+    const apply = (c: ConsentSnapshot) => {
+      if (c.adsPersonalized) {
+        root.setAttribute("data-ads-personalized", "");
+      } else {
+        root.removeAttribute("data-ads-personalized");
+      }
     };
-    apply();
-    return subscribeConsent(() => apply());
+
+    // État initial
+    const initial = readConsentClient();
+    if (initial) apply(initial);
+
+    // Mises à jour (typées)
+    const unsub = subscribeConsent((c) => {
+      // c: ConsentSnapshot & { ads: boolean }
+      apply({
+        necessary: c.necessary,
+        analytics: c.analytics,
+        adsPersonalized: c.adsPersonalized,
+      });
+    });
+
+    return () => unsub();
   }, []);
+
   return null;
 }

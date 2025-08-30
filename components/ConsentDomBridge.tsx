@@ -2,22 +2,26 @@
 "use client";
 
 import { useEffect } from "react";
-import type { ConsentSnapshot } from "@/lib/consent";
+import { isConsentDecided, subscribeConsent } from "@/lib/consent";
 
-/** Reflète le consentement dans <html data-ads-personalized="true|false"> */
 export default function ConsentDomBridge() {
   useEffect(() => {
-    const apply = (snap: ConsentSnapshot) => {
-      document.documentElement.dataset.adsPersonalized = snap.adsPersonalized ? "true" : "false";
+    const html = document.documentElement;
+
+    const apply = () => {
+      const decided = isConsentDecided();
+      if (decided) html.setAttribute("data-consent-decided", "true");
+      else html.removeAttribute("data-consent-decided");
     };
 
-    const onConsent = (e: Event) => {
-      const evt = e as CustomEvent<ConsentSnapshot>;
-      if (evt.detail) apply(evt.detail);
-    };
+    apply();
+    const unsub = subscribeConsent(() => apply());
+    window.addEventListener("storage", apply);
 
-    window.addEventListener("cookie-consent", onConsent);
-    return () => window.removeEventListener("cookie-consent", onConsent);
+    return () => {
+      unsub();
+      window.removeEventListener("storage", apply);
+    };
   }, []);
 
   return null;

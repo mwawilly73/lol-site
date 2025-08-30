@@ -1,34 +1,53 @@
 // components/AnalyticsLoader.tsx
 "use client";
 
-import { useEffect, useState } from "react";
-import Script from "next/script";
-import { readConsentClient, subscribeConsent } from "@/lib/consent";
+import { useEffect, useRef } from "react";
+import {
+  readConsentClient,
+  subscribeConsent,
+  type ConsentSnapshot,
+} from "@/lib/consent";
 
-/**
- * Charge Plausible uniquement si l'utilisateur a accepté "analytics".
- * Mets NEXT_PUBLIC_PLAUSIBLE_DOMAIN dans .env.local (ex: NEXT_PUBLIC_PLAUSIBLE_DOMAIN=lol-quiz.example.com)
- */
 export default function AnalyticsLoader() {
-  const [enabled, setEnabled] = useState(false);
+  const domain = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
+  const loadedRef = useRef(false);
 
   useEffect(() => {
-    // état initial
-    setEnabled(!!readConsentClient()?.analytics);
-    // mise à jour live si l’utilisateur change d’avis
-    return subscribeConsent((c) => setEnabled(!!c.analytics));
-  }, []);
+    if (!domain) return;
 
-  if (!enabled) return null;
+    const loadScript = () => {
+      if (loadedRef.current) return;
+      const c = readConsentClient();
+      if (!c?.analytics) return;
 
-  const domain = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
-  if (!domain) return null; // évite les erreurs si variable absente en dev
+      const s = document.createElement("script");
+      s.src = "https://plausible.io/js/script.js";
+      s.defer = true;
+      s.setAttribute("data-domain", domain);
+      document.head.appendChild(s);
+      loadedRef.current = true;
+    };
 
-  return (
-    <Script
-      src="https://plausible.io/js/script.js"
-      data-domain={domain}
-      strategy="afterInteractive"
-    />
-  );
+    // Planifie après l'idle (ou setTimeout en fallback) sans redéclarer Window
+    const scheduleIdle = (work: () => void, timeout = 1500) => {
+      if (
+        typeof window !== "undefined" &&
+        typeof window.requestIdleCallback === "function"
+      ) {
+        // IdleRequestCallback attend un param (deadline) -> on l’ignore ici
+        window.requestIdleCallback(() => work(), { timeout });
+      } else {
+        window.setTimeout(work, Math.min(timeout, 1600));
+      }
+    };
+
+    scheduleIdle(loadScript);
+
+    const unsub = subscribeConsent((c: ConsentSnapshot) => {
+      if (c.analytics) loadScript();
+    });
+    return () => unsub();
+  }, [domain]);
+
+  return null;
 }
