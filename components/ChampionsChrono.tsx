@@ -116,6 +116,7 @@ function SwitchButton({
       role="switch"
       aria-checked={on}
       aria-label={ariaLabel}
+      style={{ touchAction: "manipulation" }}
     >
       <span
         className={`absolute left-1 top-1 bg-white rounded-full shadow-md transform transition-transform duration-300
@@ -123,6 +124,119 @@ function SwitchButton({
       />
       <span className="sr-only">{ariaLabel}</span>
     </button>
+  );
+}
+
+/* ========================= Durées & format ========================= */
+const CHRONO_OPTIONS = [
+  { ms: 90_000,  label: "1:30" },
+  { ms: 300_000, label: "5:00" },
+  { ms: 600_000, label: "10:00" },
+  { ms: 900_000, label: "15:00" },
+] as const;
+
+/* ====== Boîte Chrono cliquable (dropdown intégré dans la case du chrono) ====== */
+function ChronoBoxDropdown({
+  mode,
+  started,
+  ms,
+  duration,
+  onChangeDuration,
+}: {
+  mode: "libre" | "chrono";
+  started: boolean;
+  ms: number;
+  duration: number;
+  onChangeDuration: (v: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+
+  // Fermer au clic extérieur / Échap
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    const onClick = (e: MouseEvent) => {
+      if (!boxRef.current) return;
+      if (!boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("mousedown", onClick);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
+    };
+  }, [open]);
+
+  const disabled = mode !== "chrono" || started;
+  const caret = "▾";
+
+  // Largeur fixe identique à l’ancienne box pour éviter tout décalage
+  const timerWidth = "min-w-[118px] sm:min-w-[128px] lg:min-w-[144px]";
+
+  function fmt(t: number) {
+    const s = Math.floor(Math.max(0, t) / 1000);
+    const mm = Math.floor(s / 60).toString().padStart(2, "0");
+    const ss = (s % 60).toString().padStart(2, "0");
+    const ds = Math.floor((Math.max(0, t) % 1000) / 100).toString();
+    return `${mm}:${ss}.${ds}`;
+  }
+  const currentLabel = CHRONO_OPTIONS.find(o => o.ms === duration)?.label ?? "1:30";
+
+  return (
+    <div ref={boxRef} className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className={`rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1 font-mono tabular-nums text-center ${timerWidth}
+          inline-flex items-center justify-center gap-1
+          ${disabled ? "" : "hover:bg-white/10"}
+        `}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        title={mode === "chrono" ? (disabled ? "Changer la durée (désactivé pendant la partie)" : "Cliquer pour changer la durée") : "Indisponible en mode Libre"}
+        style={{ touchAction: "manipulation" }}
+      >
+        {/* On montre le temps courant ; avant de démarrer c’est égal à la durée choisie */}
+        <span className="whitespace-nowrap">⏱ {fmt(ms)}</span>
+        <span className={`text-white/70 ${disabled ? "opacity-60" : ""}`} aria-hidden>{caret}</span>
+      </button>
+
+      {open && !disabled && (
+        <div
+          className="absolute z-30 mt-1 min-w-[8rem] max-w-[calc(100vw-2rem)] rounded-md bg-[#0e1117] ring-1 ring-white/15 shadow-xl overflow-hidden"
+          role="listbox"
+        >
+          <div className="px-3 py-2 text-[11px] uppercase tracking-wide text-white/50">
+            Durée (actuelle&nbsp;: {currentLabel})
+          </div>
+          {CHRONO_OPTIONS.map((o) => {
+            const active = o.ms === duration;
+            return (
+              <button
+                key={o.ms}
+                type="button"
+                role="option"
+                aria-selected={active}
+                onClick={() => {
+                  onChangeDuration(o.ms);
+                  setOpen(false);
+                }}
+                className={`block w-full text-left px-3 py-1.5 text-sm ${
+                  active
+                    ? "bg-emerald-500/20 text-emerald-300"
+                    : "text-white/90 hover:bg-white/10"
+                }`}
+                style={{ touchAction: "manipulation" }}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -154,11 +268,15 @@ export default function ChampionsChrono({
   const [mode, setMode] = useState<GameMode>("chrono");
   const [useSkin, setUseSkin] = useState<boolean>(true);
 
+  const [chronoDuration, setChronoDuration] = useState<number>(CHRONO_OPTIONS[0].ms);
+  const chronoLabel = useMemo(
+    () => CHRONO_OPTIONS.find(o => o.ms === chronoDuration)?.label ?? "1:30",
+    [chronoDuration]
+  );
+
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false); // seulement “libre”
-
-  const CHRONO_START_MS = 90_000;
-  const [ms, setMs] = useState(CHRONO_START_MS);
+  const [ms, setMs] = useState(chronoDuration);
 
   const timerRef = useRef<number | null>(null);
 
@@ -179,11 +297,7 @@ export default function ChampionsChrono({
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // FIN DE PARTIE (modal)
-  const [endModal, setEndModal] = useState<{
-    title: string;
-    message: string;
-  } | null>(null);
+  const [endModal, setEndModal] = useState<{ title: string; message: string } | null>(null);
 
   // Charger la map des skins une fois
   useEffect(() => {
@@ -203,7 +317,7 @@ export default function ChampionsChrono({
     return () => { alive = false; };
   }, []);
 
-  /* ---------- confetti ultra light (ctx typé) ---------- */
+  /* ---------- confetti ultra light ---------- */
   const burstConfetti = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -262,11 +376,8 @@ export default function ChampionsChrono({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentChampion?.id, useSkin, skinsLoaded, started]);
 
-  // Démarrage / Pause / Stop
-  const start = useCallback(() => {
-    if (started) return;
-    setStarted(true);
-    setPaused(false);
+  // Reset d’une run
+  const resetRunState = useCallback(() => {
     setIdx(0);
     setInput("");
     setLettersShown(0);
@@ -274,12 +385,20 @@ export default function ChampionsChrono({
     setSolved(0);
     setEndModal(null);
     setFocusHalo(true);
-    setMs(mode === "chrono" ? CHRONO_START_MS : 0);
+  }, []);
+
+  // Démarrage / Pause / Stop / Abandon
+  const start = useCallback(() => {
+    if (started) return;
+    setStarted(true);
+    setPaused(false);
+    resetRunState();
+    setMs(mode === "chrono" ? chronoDuration : 0);
     setTimeout(() => inputRef.current?.focus(), 0);
-  }, [started, mode]);
+  }, [started, mode, chronoDuration, resetRunState]);
 
   const togglePause = useCallback(() => {
-    if (mode === "chrono") return; // pas de pause en chrono
+    if (mode === "chrono") return;
     setPaused((p) => !p);
   }, [mode]);
 
@@ -288,6 +407,14 @@ export default function ChampionsChrono({
     setPaused(false);
     if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
   }, []);
+
+  const abandon = useCallback(() => {
+    stop();
+    setEndModal({
+      title: "🛑 Abandonné",
+      message: `En ${chronoLabel}, tu as trouvé ${solved} champions sur ${order.length}.`,
+    });
+  }, [stop, chronoLabel, solved, order.length]);
 
   // Tick 100ms
   useEffect(() => {
@@ -299,13 +426,12 @@ export default function ChampionsChrono({
         if (mode === "libre") return t + 100;
         const next = t - 100;
         if (next <= 0) {
-          // Fin chrono → modal + stop
           setStarted(false);
           setPaused(false);
           if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
           setEndModal({
             title: "⏱ Temps écoulé !",
-            message: `En 1 min 30 s, tu as trouvé ${solved} champions sur ${order.length}.`,
+            message: `En ${chronoLabel}, tu as trouvé ${solved} champions sur ${order.length}.`,
           });
           return 0;
         }
@@ -316,18 +442,17 @@ export default function ChampionsChrono({
     return () => {
       if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
     };
-  }, [started, paused, mode, solved, order.length]);
+  }, [started, paused, mode, solved, order.length, chronoLabel]);
 
-  // Fin libre → modal
+  // Refléter la durée quand on change de mode / valeur (si non démarré)
   useEffect(() => {
-    if (mode === "libre" && started && idx >= order.length) {
-      stop();
-      setEndModal({
-        title: "🎉 Terminé !",
-        message: `Félicitations, tu as trouvé tous les champions en ${formatTime(ms)}.`,
-      });
-    }
-  }, [idx, order.length, started, stop, mode, ms]);
+    if (!started) setMs(mode === "chrono" ? chronoDuration : 0);
+  }, [mode, chronoDuration, started]);
+
+  const onChangeChronoDuration = useCallback((v: number) => {
+    setChronoDuration(v);
+    if (!started) setMs(v);
+  }, [started]);
 
   function formatTime(t: number) {
     const val = mode === "chrono" ? Math.max(0, t) : t;
@@ -338,27 +463,22 @@ export default function ChampionsChrono({
     return `${mm}:${ss}.${ds}`;
   }
 
-  const validateInput = useCallback(
-    (raw: string) => {
-      if (!currentChampion) return false;
-      const nInput = norm(raw.trim());
-      if (!nInput) return false;
-
-      const keys = aliasKeysForChampion(currentChampion);
-      const exact = keys.some((k) => nInput === k);
-      if (exact) return true;
-
-      let best = Number.POSITIVE_INFINITY;
-      for (const k of keys) {
-        const d = lev(nInput, k);
-        if (d < best) best = d;
-        if (best === 0) break;
-      }
-      const L = Math.max(nInput.length, norm(currentChampion.name).length);
-      return best <= (L <= 5 ? 1 : L <= 8 ? 2 : 3);
-    },
-    [currentChampion]
-  );
+  const validateInput = useCallback((raw: string) => {
+    if (!currentChampion) return false;
+    const nInput = norm(raw.trim());
+    if (!nInput) return false;
+    const keys = aliasKeysForChampion(currentChampion);
+    const exact = keys.some((k) => nInput === k);
+    if (exact) return true;
+    let best = Number.POSITIVE_INFINITY;
+    for (const k of keys) {
+      const d = lev(nInput, k);
+      if (d < best) best = d;
+      if (best === 0) break;
+    }
+    const L = Math.max(nInput.length, norm(currentChampion.name).length);
+    return best <= (L <= 5 ? 1 : L <= 8 ? 2 : 3);
+  }, [currentChampion]);
 
   const burstAndNext = useCallback(() => {
     setSolved((s) => s + 1);
@@ -370,15 +490,12 @@ export default function ChampionsChrono({
     setTimeout(() => inputRef.current?.focus(), 0);
   }, [burstConfetti]);
 
-  const onSubmit = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!currentChampion) return;
-      if (validateInput(input)) burstAndNext();
-      else setStreak(0);
-    },
-    [input, currentChampion, burstAndNext, validateInput]
-  );
+  const onSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentChampion) return;
+    if (validateInput(input)) burstAndNext();
+    else setStreak(0);
+  }, [input, currentChampion, burstAndNext, validateInput]);
 
   const onReveal = useCallback(() => {
     if (!currentChampion) return;
@@ -388,16 +505,17 @@ export default function ChampionsChrono({
 
   const onShare = useCallback(async () => {
     const base = mode === "chrono" ? "au chrono" : "en mode libre";
-    const text = `J’ai fait ${solved} ${base} en ${formatTime(mode === "chrono" ? CHRONO_START_MS - ms : ms)} sur LoL Quiz !`;
+    const elapsed = mode === "chrono" ? chronoDuration - ms : ms;
+    const text = `J’ai fait ${solved} ${base} en ${formatTime(elapsed)} sur Chrono-Break !`;
     try {
       if (navigator.share) {
-        await navigator.share({ text, url: window.location.href, title: "LoL Quiz — Chrono" });
+        await navigator.share({ text, url: window.location.href, title: "Chrono-Break" });
       } else {
         await navigator.clipboard.writeText(`${text} ${window.location.href}`);
         alert("Score copié dans le presse-papiers !");
       }
     } catch {}
-  }, [solved, ms, mode]);
+  }, [solved, ms, mode, chronoDuration]);
 
   const maskedName =
     currentChampion && lettersShown > 0
@@ -406,24 +524,19 @@ export default function ChampionsChrono({
 
   const isFirstImage = started && idx === 0;
 
-  /* ------ % barre visuelle (chrono: temps restant, libre: progression) ------ */
   const progressPercent =
     mode === "chrono"
-      ? (ms / CHRONO_START_MS) * 100
+      ? (ms / chronoDuration) * 100
       : order.length > 0
       ? (solved / order.length) * 100
       : 0;
 
-  /* ======================= BARRE D’INFOS (switchs + responsive) ======================= */
-  const timerWidth = "min-w-[118px] sm:min-w-[128px] lg:min-w-[144px]";
   const ctaWidth = "min-w-[118px] sm:min-w-[128px]";
 
   return (
-    <div className="space-y-4 sm:space-y-5 overflow-x-hidden">
+    <div className="space-y-4 sm:space-y-5 overflow-x-hidden max-w-full">
       {/* Ligne(s) de commandes */}
       <div className="flex flex-col gap-2 sm:gap-3 max-w-full">
-        {/* Desktop: (gauche) Mode+Skin+Partager | (centre) Timer/Score/Série | (droite) Démarrer/Pause
-            Mobile: L1 Mode+Skin, L2 Timer+Score+Partager, L3 Démarrer/Pause+Série */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full">
           {/* Gauche */}
           <div className="flex items-center gap-3 sm:gap-4">
@@ -435,7 +548,7 @@ export default function ChampionsChrono({
                 onToggle={() => {
                   const toChrono = !(mode === "chrono");
                   setMode(toChrono ? "chrono" : "libre");
-                  setMs(toChrono ? CHRONO_START_MS : 0);
+                  setMs(toChrono ? chronoDuration : 0);
                   setStarted(false);
                   setPaused(false);
                   setEndModal(null);
@@ -476,6 +589,7 @@ export default function ChampionsChrono({
               onClick={onShare}
               className="hidden md:inline-flex rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 px-3 py-1.5"
               title="Partager mon score"
+              style={{ touchAction: "manipulation" }}
             >
               Partager
             </button>
@@ -483,9 +597,15 @@ export default function ChampionsChrono({
 
           {/* Milieu (centré) — desktop only */}
           <div className="hidden md:flex flex-1 items-center justify-center gap-3">
-            <div className={`rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1 font-mono tabular-nums text-center ${timerWidth}`}>
-              ⏱ {formatTime(ms)}
-            </div>
+            {/* Boîte chrono cliquable (ouvre le menu) */}
+            <ChronoBoxDropdown
+              mode={mode}
+              started={started}
+              ms={ms}
+              duration={chronoDuration}
+              onChangeDuration={onChangeChronoDuration}
+            />
+
             <div className="rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1">
               Score : <span className="font-semibold">{solved}</span> / {order.length}
             </div>
@@ -494,13 +614,14 @@ export default function ChampionsChrono({
             </div>
           </div>
 
-          {/* Droite — desktop/tablette uniquement (HIDE en mobile) */}
+          {/* Droite — desktop/tablette */}
           <div className="ml-auto hidden md:flex items-center gap-2 sm:gap-3">
             {!started ? (
               <button
                 type="button"
                 onClick={start}
                 className={`rounded-md bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-white font-semibold ${ctaWidth}`}
+                style={{ touchAction: "manipulation" }}
               >
                 Démarrer
               </button>
@@ -509,27 +630,33 @@ export default function ChampionsChrono({
                 type="button"
                 onClick={togglePause}
                 className={`rounded-md ${paused ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "bg-white/10 hover:bg-white/15 ring-1 ring-white/15"} px-3 py-1.5 font-semibold ${ctaWidth}`}
+                style={{ touchAction: "manipulation" }}
               >
                 {paused ? "Reprendre" : "Pause"}
               </button>
             ) : (
               <button
                 type="button"
-                disabled
-                className={`rounded-md bg-white/10 ring-1 ring-white/15 px-3 py-1.5 opacity-60 ${ctaWidth}`}
-                title="Pas de pause en mode chrono"
+                onClick={abandon}
+                className={`rounded-md bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-white font-semibold ${ctaWidth}`}
+                title="Abandonner la partie"
+                style={{ touchAction: "manipulation" }}
               >
-                Chrono en cours
+                Abandonner
               </button>
             )}
           </div>
         </div>
 
-        {/* Mobile L2: ⏱ + Score + Partager */}
+        {/* Mobile L2: ⏱ (cliquable) + Score + Partager */}
         <div className="md:hidden flex flex-wrap items-center justify-center gap-2 w-full">
-          <div className={`rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1 font-mono tabular-nums text-center ${timerWidth}`}>
-            ⏱ {formatTime(ms)}
-          </div>
+          <ChronoBoxDropdown
+            mode={mode}
+            started={started}
+            ms={ms}
+            duration={chronoDuration}
+            onChangeDuration={onChangeChronoDuration}
+          />
           <div className="rounded-md bg-white/5 ring-1 ring-white/10 px-2.5 py-1">
             Score : <span className="font-semibold">{solved}</span> / {order.length}
           </div>
@@ -538,18 +665,20 @@ export default function ChampionsChrono({
             onClick={onShare}
             className="rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 px-3 py-1.5"
             title="Partager mon score"
+            style={{ touchAction: "manipulation" }}
           >
             Partager
           </button>
         </div>
 
-        {/* Mobile L3: Démarrer/Pause + Série */}
+        {/* Mobile L3: CTA + Série */}
         <div className="md:hidden flex items-center justify-center gap-2 w-full">
           {!started ? (
             <button
               type="button"
               onClick={start}
               className={`rounded-md bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 text-white font-semibold ${ctaWidth}`}
+              style={{ touchAction: "manipulation" }}
             >
               Démarrer
             </button>
@@ -558,17 +687,19 @@ export default function ChampionsChrono({
               type="button"
               onClick={togglePause}
               className={`rounded-md ${paused ? "bg-emerald-600 hover:bg-emerald-500 text-white" : "bg-white/10 hover:bg-white/15 ring-1 ring-white/15"} px-3 py-1.5 font-semibold ${ctaWidth}`}
+              style={{ touchAction: "manipulation" }}
             >
               {paused ? "Reprendre" : "Pause"}
             </button>
           ) : (
             <button
               type="button"
-              disabled
-              className={`rounded-md bg-white/10 ring-1 ring-white/15 px-3 py-1.5 opacity-60 ${ctaWidth}`}
-              title="Pas de pause en mode chrono"
+              onClick={abandon}
+              className={`rounded-md bg-rose-600 hover:bg-rose-500 px-3 py-1.5 text-white font-semibold ${ctaWidth}`}
+              title="Abandonner la partie"
+              style={{ touchAction: "manipulation" }}
             >
-              Chrono en cours
+              Abandonner
             </button>
           )}
 
@@ -578,7 +709,7 @@ export default function ChampionsChrono({
         </div>
       </div>
 
-      {/* Barre visuelle (au-dessus de l’image) */}
+      {/* Barre visuelle */}
       <div className="relative">
         <div className="h-2 rounded-full bg-white/10 overflow-hidden ring-1 ring-white/10">
           <div
@@ -608,6 +739,7 @@ export default function ChampionsChrono({
                   type="button"
                   onClick={start}
                   className="pointer-events-auto rounded-2xl bg-emerald-600 hover:bg-emerald-500 px-6 py-3 text-white font-bold text-lg shadow-2xl ring-1 ring-emerald-400/40"
+                  style={{ touchAction: "manipulation" }}
                 >
                   Démarrer
                 </button>
@@ -636,18 +768,72 @@ export default function ChampionsChrono({
 
           {/* Canvas confettis */}
           <canvas ref={canvasRef} className="pointer-events-none absolute inset-0" aria-hidden />
+
+          {/* Overlay bas (PC/Tablette) */}
+          {started && currentChampion && (
+            <div className="hidden md:block pointer-events-none absolute inset-x-0 bottom-0">
+              <div className="pointer-events-auto mx-2 mb-2 rounded-lg bg-black/55 backdrop-blur-sm ring-1 ring-white/10 p-2 sm:p-3">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                  <div className="hidden lg:block text-white/90 font-semibold truncate max-w-[40%]">
+                    {revealName(currentChampion.name, lettersShown)}
+                  </div>
+
+                  <form
+                    onSubmit={onSubmit}
+                    className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3"
+                  >
+                    <label htmlFor="answer-overlay" className="sr-only">Votre réponse</label>
+                    <input
+                      id="answer-overlay"
+                      name="answer-overlay"
+                      ref={inputRef}
+                      autoComplete="off"
+                      enterKeyHint="done"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      disabled={(mode === "libre" && paused)}
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      className={`min-w-0 w-full rounded-md bg-white/5 ring-1 ring-white/10 px-3 py-2 text-[16px] sm:text-[15px] text-white placeholder:text-white/40 outline-none
+                        ${focusHalo ? "focus:ring-2 focus:ring-emerald-400/80" : ""}`}
+                      placeholder="Tape le nom du champion…"
+                      onFocus={() => setFocusHalo(true)}
+                      onBlur={() => setFocusHalo(false)}
+                    />
+                    <button
+                      type="button"
+                      onClick={onReveal}
+                      disabled={(mode === "libre" && paused)}
+                      className="rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 px-3 py-2 text-[16px] sm:text-sm"
+                      style={{ touchAction: "manipulation" }}
+                    >
+                      Aide
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={(mode === "libre" && paused)}
+                      className="rounded-md bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-[16px] sm:text-sm font-semibold text-white"
+                      style={{ touchAction: "manipulation" }}
+                    >
+                      Valider
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Nom masqué / Aide */}
-      <div className="text-center text-base sm:text-lg lg:text-xl font-semibold text-white/90">
-        {started && currentChampion ? maskedName : "—"}
+      {/* Nom masqué (Mobile) */}
+      <div className="md:hidden text-center text-base sm:text-lg lg:text-xl font-semibold text-white/90">
+        {started && currentChampion ? revealName(currentChampion.name, lettersShown) : "—"}
       </div>
 
-      {/* Formulaire */}
+      {/* Formulaire (Mobile) */}
       <form
         onSubmit={onSubmit}
-        className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3"
+        className="md:hidden flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 max-w-full"
       >
         <label htmlFor="answer" className="sr-only">Votre réponse</label>
         <input
@@ -661,7 +847,7 @@ export default function ChampionsChrono({
           disabled={!started || (mode === "libre" && paused) || !currentChampion}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          className={`min-w-0 w-full sm:flex-1 rounded-md bg-white/5 ring-1 ring-white/10 px-3 py-2.5 text-[15px] text-white placeholder:text-white/40 outline-none
+          className={`min-w-0 w-full sm:flex-1 rounded-md bg-white/5 ring-1 ring-white/10 px-3 py-2.5 text-[16px] sm:text-[15px] text-white placeholder:text-white/40 outline-none
             ${focusHalo ? "focus:ring-2 focus:ring-emerald-400/80" : ""}`}
           placeholder="Tape le nom du champion…"
           onFocus={() => setFocusHalo(true)}
@@ -673,21 +859,23 @@ export default function ChampionsChrono({
             type="button"
             onClick={onReveal}
             disabled={!started || (mode === "libre" && paused) || !currentChampion}
-            className="w-full sm:w-auto rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 px-3 py-2.5 text-sm"
+            className="w-full sm:w-auto rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 px-3 py-2.5 text-[16px] sm:text-sm"
+            style={{ touchAction: "manipulation" }}
           >
             Aide (révéler)
           </button>
           <button
             type="submit"
             disabled={!started || (mode === "libre" && paused) || !currentChampion}
-            className="w-full sm:w-auto rounded-md bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 text-white font-semibold"
+            className="w-full sm:w-auto rounded-md bg-indigo-600 hover:bg-indigo-500 px-4 py-2.5 text-[16px] sm:text-sm font-semibold text-white"
+            style={{ touchAction: "manipulation" }}
           >
             Valider
           </button>
         </div>
       </form>
 
-      {/* Bandeau de fin (modal centré) */}
+      {/* Bandeau de fin */}
       {endModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
@@ -702,21 +890,24 @@ export default function ChampionsChrono({
               <button
                 type="button"
                 onClick={() => setEndModal(null)}
-                className="rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 px-4 py-2 text-sm"
+                className="rounded-md bg-white/10 hover:bg-white/15 ring-1 ring-white/15 px-4 py-2 text-[16px] sm:text-sm"
+                style={{ touchAction: "manipulation" }}
               >
                 Fermer
               </button>
               <button
                 type="button"
                 onClick={start}
-                className="rounded-md bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-md bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-[16px] sm:text-sm font-semibold text-white"
+                style={{ touchAction: "manipulation" }}
               >
                 Rejouer
               </button>
               <button
                 type="button"
                 onClick={onShare}
-                className="rounded-md bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-semibold text-white"
+                className="rounded-md bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-[16px] sm:text-sm font-semibold text-white"
+                style={{ touchAction: "manipulation" }}
               >
                 Partager
               </button>

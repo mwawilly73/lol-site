@@ -1,8 +1,8 @@
 // app/cookies/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
-// ⬇️ Import direct (CookiePrefs est un Client Component avec "use client")
 import CookiePrefs from "@/components/CookiePrefs";
+import Breadcrumbs from "@/components/Breadcrumbs";
 
 export const metadata: Metadata = {
   title: "Cookies | LoL Quiz",
@@ -19,8 +19,20 @@ export const metadata: Metadata = {
 };
 
 export default function CookiesPage() {
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Accueil', item: '/' },
+      { '@type': 'ListItem', position: 2, name: 'Cookies' },
+    ],
+  };
+
   return (
     <section className="mx-auto max-w-6xl px-3 sm:px-4 py-6 space-y-6">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <Breadcrumbs items={[{ label: "Accueil", href: "/" }, { label: "Cookies" }]} />
+
       <header className="space-y-2">
         <h1 className="text-2xl md:text-3xl font-bold">Préférences de cookies</h1>
         <p className="text-white/80">

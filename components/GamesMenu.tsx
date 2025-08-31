@@ -1,107 +1,108 @@
+// components/GamesMenu.tsx
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-type Props = {
-  /** "desktop" = bouton avec dropdown absolu ; "mobile" = liste repliable dans le burger */
-  variant: "desktop" | "mobile";
-  /** Classe utilitaire si besoin (optionnel) */
-  className?: string;
-};
-
-export default function GamesMenu({ variant, className = "" }: Props) {
-  if (variant === "mobile") {
-    return <MobileGames className={className} />;
-  }
-  return <DesktopGames className={className} />;
-}
-
-/* ---------- Desktop dropdown ---------- */
-function DesktopGames({ className = "" }: { className?: string }) {
+export default function GamesMenu({ variant }: { variant: "desktop" | "mobile" }) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!ref.current) return;
-      if (!ref.current.contains(e.target as Node)) setOpen(false);
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, []);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const linkBase =
+    "block rounded-lg px-4 py-2 text-sm md:text-base transition-colors text-white/90 hover:text-white hover:bg-white/10";
+
+  if (variant === "mobile") {
+    // Dans le panneau mobile : même style que les autres entrées
+    return (
+      <div ref={rootRef}>
+        <button
+          type="button"
+          className={`${linkBase} w-full text-left`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+        >
+          Jeux ▾
+        </button>
+
+        {open && (
+          <div role="menu" aria-label="Jeux" className="mt-1 space-y-1 px-1">
+            <Link
+              role="menuitem"
+              href="/games/champions"
+              className={`${linkBase} ${pathname === "/games/champions" ? "bg-white/15 text-white" : ""}`}
+              onClick={() => setOpen(false)}
+            >
+              Liste des champions
+            </Link>
+            <Link
+              role="menuitem"
+              href="/games/chrono"
+              className={`${linkBase} ${pathname?.startsWith("/games/chrono") ? "bg-white/15 text-white" : ""}`}
+              onClick={() => setOpen(false)}
+            >
+              Chrono-Break
+            </Link>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Desktop : bouton identique aux liens + dropdown
+  const triggerClasses = `${linkBase} ${open ? "bg-white/15 text-white" : ""}`;
 
   return (
-    <div
-      ref={ref}
-      className={`relative ${className}`}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
+    <div ref={rootRef} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-sm bg-white/5 ring-1 ring-white/10 hover:bg-white/10 focus:outline-none"
+        className={triggerClasses}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-controls="games-menu-popover"
+        onClick={() => setOpen((v) => !v)}
       >
         Jeux ▾
       </button>
 
       {open && (
         <div
-          id="games-menu-popover"
           role="menu"
-          className="absolute z-50 mt-2 w-56 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl p-1"
+          aria-label="Jeux"
+          className="absolute right-0 mt-2 w-60 rounded-xl ring-1 ring-white/10 bg-[#0e1117] shadow-2xl p-1 z-50"
         >
           <Link
-            href="/games/champions"
             role="menuitem"
-            className="block rounded-md px-3 py-2 text-sm hover:bg-white/10"
+            href="/games/champions"
+            className={`${linkBase} ${pathname === "/games/champions" ? "bg-white/15 text-white" : ""}`}
+            onClick={() => setOpen(false)}
           >
             Liste des champions
           </Link>
           <Link
-            href="/games/chrono"
             role="menuitem"
-            className="block rounded-md px-3 py-2 text-sm hover:bg-white/10"
-          >
-            Chrono des champions
-          </Link>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ---------- Mobile collapsible (dans le burger) ---------- */
-function MobileGames({ className = "" }: { className?: string }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={`rounded-md ${className}`}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full text-left rounded-md px-3 py-2 text-sm hover:bg-white/10"
-        aria-expanded={open}
-        aria-controls="games-mobile-sublist"
-      >
-        Jeux ▾
-      </button>
-      {open && (
-        <div id="games-mobile-sublist" className="pl-3 pb-1">
-          <Link
-            href="/games/champions"
-            className="block rounded-md px-3 py-2 text-sm hover:bg-white/10"
-          >
-            Liste des champions
-          </Link>
-          <Link
             href="/games/chrono"
-            className="block rounded-md px-3 py-2 text-sm hover:bg-white/10"
+            className={`${linkBase} ${pathname?.startsWith("/games/chrono") ? "bg-white/15 text-white" : ""}`}
+            onClick={() => setOpen(false)}
           >
-            Chrono des champions
+            Chrono-Break
           </Link>
         </div>
       )}

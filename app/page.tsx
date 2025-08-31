@@ -93,9 +93,9 @@ export default function HomePage() {
             />
 
             <GameCard
-              href="/games/champions/chrono"
-              title="Chrono 60s"
-              subtitle="Devine un max en 60s"
+              href="/games/chrono"
+              title="Chrono-Break"
+              subtitle="Trouve un Max de champions en temps limité"
               imageUrl="https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Zilean_6.jpg"
             />
 

@@ -1,5 +1,6 @@
 // app/legal/mentions-legales/page.tsx
 import type { Metadata } from "next";
+import Breadcrumbs from "@/components/Breadcrumbs";
 
 export const metadata: Metadata = {
   title: "Mentions légales | LoL Quiz",
@@ -16,8 +17,20 @@ export const metadata: Metadata = {
 };
 
 export default function MentionsLegalesPage() {
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Accueil', item: '/' },
+      { '@type': 'ListItem', position: 2, name: 'Mentions légales' },
+    ],
+  };
+
   return (
     <section className="container-lg space-y-6">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <Breadcrumbs items={[{ label: "Accueil", href: "/" }, { label: "Mentions légales" }]} />
+
       <header className="space-y-2">
         <h1 className="text-2xl md:text-3xl font-bold">Mentions légales</h1>
         <p className="text-white/80">
@@ -60,9 +73,7 @@ export default function MentionsLegalesPage() {
 
         <section className="space-y-2">
           <h2 className="text-lg font-semibold text-white">Mentions légales de Riot Games</h2>
-          <p>
-            Pour les mentions légales officielles de Riot Games, veuillez consulter&nbsp;:
-          </p>
+          <p>Pour les mentions légales officielles de Riot Games, veuillez consulter&nbsp;:</p>
           <p>
             <a
               href="https://www.riotgames.com/fr/mentions-legales"

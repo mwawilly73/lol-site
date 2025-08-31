@@ -1,17 +1,37 @@
 // app/legal/confidentialite/page.tsx
 import type { Metadata } from "next";
 import Link from "next/link";
+import Breadcrumbs from "@/components/Breadcrumbs";
 
 export const metadata: Metadata = {
   title: "Politique de confidentialité | LoL Quiz",
   description:
     "Comment nous traitons vos données, les cookies essentiels, et l'option de publicités personnalisées.",
   alternates: { canonical: "/legal/confidentialite" },
+  openGraph: {
+    title: "Politique de confidentialité | LoL Quiz",
+    description:
+      "Comment nous traitons vos données, les cookies essentiels, et l'option de publicités personnalisées.",
+    url: "/legal/confidentialite",
+    type: "article",
+  },
 };
 
 export default function ConfidentialitePage() {
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Accueil', item: '/' },
+      { '@type': 'ListItem', position: 2, name: 'Confidentialité' },
+    ],
+  };
+
   return (
     <section className="container-lg prose prose-invert">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <Breadcrumbs items={[{ label: "Accueil", href: "/" }, { label: "Confidentialité" }]} />
+
       <h1>Politique de confidentialité</h1>
 
       <h2>Ce que nous faisons</h2>
