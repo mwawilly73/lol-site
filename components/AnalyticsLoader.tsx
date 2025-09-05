@@ -7,12 +7,20 @@ import {
   subscribeConsent,
   type ConsentSnapshot,
 } from "@/lib/consent";
+import { isProdLike } from "@/lib/runtime";
 
+/**
+ * Charge Plausible uniquement :
+ * - en prod réelle (pas localhost)
+ * - si consentement analytics = true
+ * - et pas deux fois (memo ref)
+ */
 export default function AnalyticsLoader() {
   const domain = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
   const loadedRef = useRef(false);
 
   useEffect(() => {
+    if (!isProdLike()) return;      // ⛔ rien en dev/localhost
     if (!domain) return;
 
     const loadScript = () => {
@@ -28,13 +36,12 @@ export default function AnalyticsLoader() {
       loadedRef.current = true;
     };
 
-    // Planifie après l'idle (ou setTimeout en fallback) sans redéclarer Window
+    // planifie après idle (fallback setTimeout)
     const scheduleIdle = (work: () => void, timeout = 1500) => {
       if (
         typeof window !== "undefined" &&
         typeof window.requestIdleCallback === "function"
       ) {
-        // IdleRequestCallback attend un param (deadline) -> on l’ignore ici
         window.requestIdleCallback(() => work(), { timeout });
       } else {
         window.setTimeout(work, Math.min(timeout, 1600));

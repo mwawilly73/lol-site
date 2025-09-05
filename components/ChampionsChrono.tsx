@@ -198,7 +198,6 @@ function ChronoBoxDropdown({
         title={mode === "chrono" ? (disabled ? "Changer la durée (désactivé pendant la partie)" : "Cliquer pour changer la durée") : "Indisponible en mode Libre"}
         style={{ touchAction: "manipulation" }}
       >
-        {/* On montre le temps courant ; avant de démarrer c’est égal à la durée choisie */}
         <span className="whitespace-nowrap">⏱ {fmt(ms)}</span>
         <span className={`text-white/70 ${disabled ? "opacity-60" : ""}`} aria-hidden>{caret}</span>
       </button>
@@ -454,14 +453,14 @@ export default function ChampionsChrono({
     if (!started) setMs(v);
   }, [started]);
 
-  function formatTime(t: number) {
+  const formatTime = useCallback((t: number) => {
     const val = mode === "chrono" ? Math.max(0, t) : t;
     const s = Math.floor(val / 1000);
     const mm = Math.floor(s / 60).toString().padStart(2, "0");
     const ss = (s % 60).toString().padStart(2, "0");
     const ds = Math.floor((val % 1000) / 100).toString();
     return `${mm}:${ss}.${ds}`;
-  }
+  }, [mode]);
 
   const validateInput = useCallback((raw: string) => {
     if (!currentChampion) return false;
@@ -501,26 +500,22 @@ export default function ChampionsChrono({
     if (!currentChampion) return;
     const totalLetters = countLetters(currentChampion.name);
     setLettersShown((n) => Math.min(totalLetters, n + 1));
-  }, [currentChampion?.name]);
+  }, [currentChampion]);
 
   const onShare = useCallback(async () => {
     const base = mode === "chrono" ? "au chrono" : "en mode libre";
-    const elapsed = mode === "chrono" ? chronoDuration - ms : ms;
-    const text = `J’ai fait ${solved} ${base} en ${formatTime(elapsed)} sur Chrono-Break !`;
+    // ⬇️ Corrigé : temps écoulé en mode chrono = chronoDuration - ms
+    const elapsed = mode === "chrono" ? (chronoDuration - ms) : ms;
+    const text = `J’ai fait ${solved} ${base} en ${formatTime(elapsed)} sur LoL Quiz !`;
     try {
       if (navigator.share) {
-        await navigator.share({ text, url: window.location.href, title: "Chrono-Break" });
+        await navigator.share({ text, url: window.location.href, title: "LoL Quiz — Chrono-Break" });
       } else {
         await navigator.clipboard.writeText(`${text} ${window.location.href}`);
         alert("Score copié dans le presse-papiers !");
       }
     } catch {}
-  }, [solved, ms, mode, chronoDuration]);
-
-  const maskedName =
-    currentChampion && lettersShown > 0
-      ? revealName(currentChampion.name, lettersShown)
-      : currentChampion?.name.replace(/[A-Za-zÀ-ÖØ-öø-ÿ]/g, "•");
+  }, [solved, ms, mode, formatTime, chronoDuration]);
 
   const isFirstImage = started && idx === 0;
 

@@ -4,6 +4,9 @@
 import { useEffect, useState } from "react";
 import { readConsentClient, subscribeConsent } from "@/lib/consent";
 
+/**
+ * Monte {children} uniquement si consentement analytics = vrai.
+ */
 export default function AnalyticsGate({ children }: { children: React.ReactNode }) {
   const [enabled, setEnabled] = useState(false);
 

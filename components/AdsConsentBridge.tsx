@@ -1,43 +1,29 @@
-// components/AdsConsentBridge.tsx
 "use client";
 
 import { useEffect } from "react";
-import {
-  readConsentClient,
-  subscribeConsent,
-  type ConsentSnapshot,
-} from "@/lib/consent";
+import { readConsentClient, subscribeConsent, type ConsentSnapshot } from "@/lib/consent";
+import { isProdLike } from "@/lib/runtime";
 
 /**
- * Réplique le consentement pub dans l'attribut
- * data-ads-personalized sur <html> (utile pour les slots).
+ * Alimente <html> en attributs data-* pour la pub :
+ *  - data-ads-enabled: "true" (pub non personnalisée autorisée par défaut)
+ *  - data-ads-personalized: "true" | "false" selon le consentement
  */
 export default function AdsConsentBridge() {
   useEffect(() => {
-    const root = document.documentElement;
+    if (!isProdLike()) return;
 
-    const apply = (c: ConsentSnapshot) => {
-      if (c.adsPersonalized) {
-        root.setAttribute("data-ads-personalized", "");
-      } else {
-        root.removeAttribute("data-ads-personalized");
-      }
+    const apply = (c: ConsentSnapshot | null | undefined) => {
+      const root = document.documentElement;
+      const personalized = !!c?.adsPersonalized;
+
+      // Par défaut on autorise l’affichage non personnalisé.
+      root.setAttribute("data-ads-enabled", "true");
+      root.setAttribute("data-ads-personalized", personalized ? "true" : "false");
     };
 
-    // État initial
-    const initial = readConsentClient();
-    if (initial) apply(initial);
-
-    // Mises à jour (typées)
-    const unsub = subscribeConsent((c) => {
-      // c: ConsentSnapshot & { ads: boolean }
-      apply({
-        necessary: c.necessary,
-        analytics: c.analytics,
-        adsPersonalized: c.adsPersonalized,
-      });
-    });
-
+    apply(readConsentClient());
+    const unsub = subscribeConsent((c) => apply(c));
     return () => unsub();
   }, []);
 

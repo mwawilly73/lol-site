@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { isProdLike } from "@/lib/runtime";
 
 type Props = {
   id: string;
@@ -11,15 +12,21 @@ type Props = {
 
 /**
  * Slot publicitaire minimal (placeholder).
- * Il s’intègrera plus tard avec AdSense / GAM.
+ * - En dev/localhost : n'initialise rien.
+ * - En prod : point d'intégration futur ((window.adsbygoogle||[]).push({}))
  * L’attribut `data-ads-personalized` sur <html> est géré par AdsConsentBridge.
  */
 export default function AdSlot({ id, className = "", size = "banner" }: Props) {
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    // Point d’intégration futur (ex: (window.adsbygoogle = window.adsbygoogle || []).push({}))
-    // On garde la logique vide pour l’instant.
+    if (!isProdLike()) return; // ⛔ aucun init en dev/localhost
+    // Exemple d'intégration plus tard :
+    // try {
+    //   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    //   (window as any).adsbygoogle = (window as any).adsbygoogle || [];
+    //   (window as any).adsbygoogle.push({});
+    // } catch {}
   }, []);
 
   const label =
@@ -31,7 +38,6 @@ export default function AdSlot({ id, className = "", size = "banner" }: Props) {
       ? "responsive"
       : "468×60";
 
-  // Hauteur indicative selon le format (placeholder visuel uniquement)
   const heightClass =
     size === "leaderboard"
       ? "h-24 md:h-28"

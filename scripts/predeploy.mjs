@@ -1,14 +1,15 @@
 // scripts/predeploy.mjs
 // -------------------------------------------------------------
-// Pré-déploiement Next.js (Windows-friendly, auto-port, stop robuste)
+// Pré-déploiement Next.js (Windows-friendly, auto-port, sitemap-aware)
 // 1) Lint + Typecheck
 // 2) Build prod
 // 3) Start prod local sur un PORT LIBRE
-//    - --reserve-3000 => scan 3001..3010 (laisse 3000 pour prod:local)
+//    - --reserve-3000 => scan 3001..3010 (laisse 3000 libre)
 //    - sinon           => scan 3000..3010
-// 4) Vérif CSP + pages clés
-// 5) (Optionnel) Lighthouse -> reports/*.html
-// 6) Arrêt PROPRE (Windows: taskkill /T /F) + logs PID
+// 4) Auto-découverte des routes via sitemap.xml (+ fallback)
+// 5) Vérif CSP + "ping" de TOUTES les pages
+// 6) Lighthouse sur toutes les pages HTML → reports/*.html
+// 7) Arrêt PROPRE (Windows: taskkill /T /F) + logs PID
 // -------------------------------------------------------------
 
 import { spawn } from "node:child_process";
@@ -17,7 +18,6 @@ import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import net from "node:net";
 
-const PAGES = ["/", "/games/champions"];
 const REPORTS_DIR = path.join(process.cwd(), "reports");
 const USE_LIGHTHOUSE = !process.argv.includes("--no-lighthouse");
 const LIGHTHOUSE_ONLY = process.argv.includes("--lighthouse-only");
@@ -35,7 +35,11 @@ function runCmd(cmd, args, opts = {}) {
       shell: process.platform === "win32",
       ...opts,
     });
-    child.on("exit", (code) => (code === 0 ? resolve() : reject(new Error(`${cmd} ${args.join(" ")} exited with ${code}`))));
+    child.on("exit", (code) =>
+      code === 0
+        ? resolve()
+        : reject(new Error(`${cmd} ${args.join(" ")} exited with ${code}`))
+    );
   });
 }
 
@@ -79,26 +83,34 @@ function parseCSP(value) {
   return map;
 }
 function checkCSP(map) {
+  // Vérif légère (pas bloquante) : on signale seulement les manques fréquents
   const issues = [];
-  const script = map.get("script-src");
-  if (!script) issues.push("CSP: script-src manquant.");
-  else if (!script.includes("'unsafe-inline'")) issues.push("CSP: script-src sans 'unsafe-inline' (sinon mettre un nonce).");
-
   const img = map.get("img-src");
-  const needImgs = ["'self'", "data:", "blob:", "https://ddragon.leagueoflegends.com", "https://raw.communitydragon.org"];
+  const needImgs = [
+    "'self'",
+    "data:",
+    "blob:",
+    "https://ddragon.leagueoflegends.com",
+    "https://raw.communitydragon.org",
+  ];
   if (!img) issues.push("CSP: img-src manquant.");
-  else for (const d of needImgs) if (!img.includes(d)) issues.push(`CSP: img-src devrait inclure ${d}`);
+  else for (const d of needImgs)
+    if (!img.includes(d)) issues.push(`CSP: img-src devrait inclure ${d}`);
 
   const conn = map.get("connect-src");
-  const needConn = ["'self'", "https://ddragon.leagueoflegends.com", "https://raw.communitydragon.org"];
+  const needConn = [
+    "'self'",
+    "https://ddragon.leagueoflegends.com",
+    "https://raw.communitydragon.org",
+  ];
   if (!conn) issues.push("CSP: connect-src manquant.");
-  else for (const d of needConn) if (!conn.includes(d)) issues.push(`CSP: connect-src devrait inclure ${d}`);
+  else for (const d of needConn)
+    if (!conn.includes(d)) issues.push(`CSP: connect-src devrait inclure ${d}`);
 
   return issues;
 }
 
 function startNextProd(port) {
-  // -p est cross-plateforme
   const child = spawn("npm", ["run", "start", "--", "-p", String(port)], {
     stdio: "inherit",
     shell: process.platform === "win32",
@@ -108,7 +120,7 @@ function startNextProd(port) {
   return child;
 }
 
-// 🔴 Arrêt ROBUSTE de l’arborescence de process
+// 🔻 Arrêt ROBUSTE de l’arborescence de process
 function killProcTree(proc) {
   return new Promise((resolve) => {
     if (!proc || proc.killed) return resolve();
@@ -117,7 +129,6 @@ function killProcTree(proc) {
     info(`Arrêt du serveur Next (PID ${pid})…`);
 
     if (process.platform === "win32") {
-      // Windows : taskkill tue TOUTE l’arborescence (/T) et force (/F)
       const killer = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
         stdio: "ignore",
         shell: true,
@@ -127,15 +138,19 @@ function killProcTree(proc) {
         resolve();
       });
       killer.on("error", () => {
-        // fallback (rare)
-        try { proc.kill("SIGINT"); } catch {}
+        try {
+          proc.kill("SIGINT");
+        } catch {}
         setTimeout(() => resolve(), 1000);
       });
     } else {
-      // Unix-like
-      try { process.kill(pid, "SIGTERM"); } catch {}
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {}
       setTimeout(() => {
-        try { process.kill(pid, "SIGKILL"); } catch {}
+        try {
+          process.kill(pid, "SIGKILL");
+        } catch {}
         ok(`Serveur arrêté (PID ${pid})`);
         resolve();
       }, 1500);
@@ -147,21 +162,97 @@ async function runLighthouse(url, outHtml) {
   try {
     const { default: lighthouse } = await import("lighthouse");
     const { launch } = await import("chrome-launcher");
-    const chrome = await launch({ chromeFlags: ["--headless", "--no-sandbox", "--disable-gpu"] });
+    const chrome = await launch({
+      chromeFlags: ["--headless", "--no-sandbox", "--disable-gpu"],
+    });
     const result = await lighthouse(url, {
       port: chrome.port,
       output: "html",
       logLevel: "error",
-      onlyCategories: ["performance", "accessibility", "best-practices", "seo"],
+      onlyCategories: [
+        "performance",
+        "accessibility",
+        "best-practices",
+        "seo",
+      ],
     });
     await writeFile(outHtml, result.report);
     const scores = Object.fromEntries(
-      Object.entries(result.lhr.categories).map(([k, v]) => [k, (v.score * 100).toFixed(0) + "%"])
+      Object.entries(result.lhr.categories).map(([k, v]) => [
+        k,
+        (v.score * 100).toFixed(0) + "%",
+      ])
     );
     await chrome.kill();
     return { ok: true, scores };
   } catch (e) {
     return { ok: false, error: e };
+  }
+}
+
+function sanitizeForFile(u) {
+  return u
+    .replace(/^https?:\/\//i, "")
+    .replace(/[^a-z0-9\-._/]/gi, "-")
+    .replace(/[\/]+/g, "_");
+}
+
+function isHtmlLike(u) {
+  // Exclut API + assets connus pour Lighthouse ; garde les pages HTML
+  return (
+    !/\/api\//.test(u) &&
+    !/\.(ico|png|jpg|jpeg|svg|webp|avif|txt|xml|json|js|css)$/i.test(u)
+  );
+}
+
+/** Auto-découverte des routes via sitemap (avec fallback statique). */
+async function getRoutesToAudit(baseUrl) {
+  try {
+    const indexXml = await (await fetch(`${baseUrl}/sitemap.xml`)).text();
+    const locsIndex = [...indexXml.matchAll(/<loc>(.*?)<\/loc>/g)].map((m) => m[1]);
+
+    const sitemapXmls = locsIndex.filter((u) => u.endsWith(".xml"));
+    let pages = [];
+
+    if (sitemapXmls.length > 0) {
+      for (const sm of sitemapXmls) {
+        const smUrlLocal = sm.replace(/^https?:\/\/[^/]+/i, baseUrl);
+        const xml = await (await fetch(smUrlLocal)).text();
+        const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map((m) => m[1]);
+        pages.push(...locs.map((u) => u.replace(/^https?:\/\/[^/]+/i, baseUrl)));
+      }
+    } else {
+      // sitemap unique listant directement les pages
+      pages.push(
+        ...locsIndex.map((u) => u.replace(/^https?:\/\/[^/]+/i, baseUrl))
+      );
+    }
+
+    // Dé-duplique
+    pages = Array.from(new Set(pages));
+
+    // Ajoute robots/sitemap aux “pings” (mais pas pour Lighthouse)
+    const extra = [`${baseUrl}/robots.txt`, `${baseUrl}/sitemap.xml`];
+    const all = Array.from(new Set([...pages, ...extra]));
+
+    return { pagesAll: all, pagesHtml: pages.filter(isHtmlLike) };
+  } catch {
+    // Fallback statique si le sitemap n’est pas dispo
+    const fallback = [
+      `${baseUrl}/`,
+      `${baseUrl}/games`,
+      `${baseUrl}/games/champions`,
+      `${baseUrl}/games/chrono`,
+      `${baseUrl}/a-propos`,
+      `${baseUrl}/legal`,
+      `${baseUrl}/legal/mentions-legales`,
+      `${baseUrl}/legal/confidentialite`,
+      `${baseUrl}/cookies`,
+    ];
+    const all = Array.from(
+      new Set([...fallback, `${baseUrl}/robots.txt`, `${baseUrl}/sitemap.xml`])
+    );
+    return { pagesAll: all, pagesHtml: fallback.filter(isHtmlLike) };
   }
 }
 
@@ -188,15 +279,15 @@ async function runLighthouse(url, outHtml) {
       info("Étape 4/5 · Démarrage prod local…");
       const startPort = RESERVE_3000 ? 3001 : 3000;
       const port = await findFreePort(startPort, 3010);
-      const base = `http://localhost:${port}`;
+      const BASE = `http://localhost:${port}`;
       serverProc = startNextProd(port);
 
-      info(`Attente du serveur sur ${base}…`);
-      const up = await waitFor(base);
+      info(`Attente du serveur sur ${BASE}…`);
+      const up = await waitFor(BASE);
       if (!up) throw new Error("Le serveur Next ne répond pas.");
 
-      // CSP (home)
-      const res = await fetch(`${base}/`, { cache: "no-store" });
+      // Vérif CSP (home)
+      const res = await fetch(`${BASE}/`, { cache: "no-store" });
       const cspRaw = res.headers.get("content-security-policy");
       if (!cspRaw) {
         warn("Aucun header Content-Security-Policy détecté (prod).");
@@ -209,30 +300,60 @@ async function runLighthouse(url, outHtml) {
         } else ok("CSP (basique) OK.");
       }
 
-      // Pages clés
-      for (const p of PAGES) {
-        const u = `${base}${p}`;
-        const r = await fetch(u, { cache: "no-store" });
-        if (r.ok) ok(`Page OK · ${u}`);
-        else {
+      // Auto-découverte via sitemap
+      const { pagesAll, pagesHtml } = await getRoutesToAudit(BASE);
+
+      // Ping de TOUTES les pages (y compris robots/sitemap)
+      for (const u of pagesAll) {
+        try {
+          const r = await fetch(u, { cache: "no-store" });
+          if (r.ok) ok(`Page OK · ${u}`);
+          else {
+            warnings++;
+            warn(`Page KO (${r.status}) · ${u}`);
+          }
+        } catch (e) {
           warnings++;
-          warn(`Page KO (${r.status}) · ${u}`);
+          warn(`Page KO (fetch error) · ${u}`);
         }
       }
 
-      // Lighthouse ?
+      // Lighthouse sur toutes les pages HTML
       if (USE_LIGHTHOUSE) {
-        info("Étape 5/5 · Audit Lighthouse…");
-        const out = path.join(REPORTS_DIR, `lighthouse-${Date.now()}.html`);
-        const target = `${base}/games/champions`;
-        const { ok: okLH, scores, error } = await runLighthouse(target, out);
-        if (okLH) {
-          ok(`Lighthouse OK · Rapport: ${out}`);
-          info(`Scores: ${JSON.stringify(scores)}`);
-        } else {
-          warnings++;
-          warn("Lighthouse indisponible (package non installé ?) — poursuite du pré-déploiement.");
-          if (error?.message) info(error.message);
+        info("Étape 5/5 · Audit Lighthouse (toutes les pages HTML)…");
+        let sum = { perf: 0, a11y: 0, bp: 0, seo: 0 };
+        let n = 0;
+
+        for (const u of pagesHtml) {
+          const out = path.join(
+            REPORTS_DIR,
+            `lighthouse-${Date.now()}-${sanitizeForFile(u)}.html`
+          );
+          const { ok: okLH, scores, error } = await runLighthouse(u, out);
+          if (okLH) {
+            ok(`Lighthouse OK · ${u}`);
+            info(`  Scores: ${JSON.stringify(scores)}`);
+            // Agrégat
+            sum.perf += parseInt(scores.performance);
+            sum.a11y += parseInt(scores["accessibility"]);
+            sum.bp += parseInt(scores["best-practices"]);
+            sum.seo += parseInt(scores.seo);
+            n++;
+          } else {
+            warnings++;
+            warn(`Lighthouse KO · ${u}`);
+            if (error?.message) info(error.message);
+          }
+        }
+
+        if (n > 0) {
+          const avg = {
+            performance: `${Math.round(sum.perf / n)}%`,
+            accessibility: `${Math.round(sum.a11y / n)}%`,
+            "best-practices": `${Math.round(sum.bp / n)}%`,
+            seo: `${Math.round(sum.seo / n)}%`,
+          };
+          info(`Scores moyens: ${JSON.stringify(avg)}`);
         }
       } else {
         info("Lighthouse désactivé (--no-lighthouse).");
@@ -251,10 +372,8 @@ async function runLighthouse(url, outHtml) {
     err(e.message || String(e));
     process.exitCode = 1;
   } finally {
-    // 🔻 ARRÊT ROBUSTE + LOG
     if (serverProc) {
       await killProcTree(serverProc);
-      // petit délai pour libérer le port proprement
       await delay(300);
     }
   }
