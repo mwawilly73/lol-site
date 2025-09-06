@@ -14,11 +14,14 @@ import AdSenseAuto from "@/components/AdSenseAuto";
 import ClientMount from "@/components/ClientMount";
 import JsonLd from "@/components/JsonLd";
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const isPreview = process.env.VERCEL_ENV === "preview";
+
 export const metadata: Metadata = {
   title: "LoL Quiz — Accueil",
   description:
     "Jeux et quiz autour des champions de League of Legends. Devine les champions, découvre leurs rôles, et entraîne ta mémoire !",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"),
+  metadataBase: new URL(SITE_URL),
   openGraph: {
     title: "LoL Quiz",
     description:
@@ -31,7 +34,6 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const hasAdsense = !!process.env.NEXT_PUBLIC_ADSENSE_PUB_ID;
-  const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
   const ORG = {
     "@context": "https://schema.org",
@@ -41,7 +43,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     logo: `${SITE_URL}/icon.png`,
   };
 
-  // ⚠️ Pas de SearchAction ici (tu n’as pas de page /search)
   const WEBSITE = {
     "@context": "https://schema.org",
     "@type": "WebSite",
@@ -59,6 +60,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="dns-prefetch" href="https://raw.communitydragon.org" />
         {/* Couleur barre d’adresse (mobile) */}
         <meta name="theme-color" content="#0e1117" />
+        {/* Noindex explicite en PREVIEW (ceinture+bretelles avec le header) */}
+        {isPreview ? <meta name="robots" content="noindex, nofollow, noarchive" /> : null}
 
         {/* JSON-LD globaux */}
         <JsonLd data={ORG} />
@@ -69,7 +72,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* 🛟 Garde-fou CSS si les styles ne chargent pas */}
         <CssGuard />
 
-        {/* ↙️ montés très tôt pour être actifs dès le chargement */}
+        {/* chargés tôt mais “consent-aware” */}
         <AnalyticsLoader />
         <AdsConsentBridge />
 
@@ -95,10 +98,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
         </main>
 
-        {/* Pied de page soigné */}
+        {/* Pied de page */}
         <SiteFooter />
 
-        {/* Publicités AdSense Auto (si consentement) */}
+        {/* Publicités AdSense Auto (prod + env présent) */}
         {process.env.NODE_ENV === "production" && hasAdsense ? <AdSenseAuto /> : null}
       </body>
     </html>
