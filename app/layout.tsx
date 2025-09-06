@@ -13,9 +13,11 @@ import AdsConsentBridge from "@/components/AdsConsentBridge";
 import AdSenseAuto from "@/components/AdSenseAuto";
 import ClientMount from "@/components/ClientMount";
 import JsonLd from "@/components/JsonLd";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 const isPreview = process.env.VERCEL_ENV === "preview";
+
 
 export const metadata: Metadata = {
   title: "LoL Quiz — Accueil",
@@ -103,6 +105,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         {/* Publicités AdSense Auto (prod + env présent) */}
         {process.env.NODE_ENV === "production" && hasAdsense ? <AdSenseAuto /> : null}
+
+        {/* ⬇️ Speed Insights : place parfaite */}
+        <SpeedInsights />
+        
       </body>
     </html>
   );

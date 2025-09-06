@@ -1,0 +1,10 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "www.votredomaine.fr" }],
+      "destination": "https://votredomaine.fr/$1",
+      "permanent": true
+    }
+  ]
+}

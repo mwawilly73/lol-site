@@ -35,6 +35,7 @@ function buildCsp(): string {
     "'self'",
     "https://ddragon.leagueoflegends.com",
     "https://raw.communitydragon.org",
+     "https://vitals.vercel-insights.com",
     ...(allowPlausible ? ["https://plausible.io"] : []),
     ...(allowAds ? ["https://googleads.g.doubleclick.net"] : []),
   ];
