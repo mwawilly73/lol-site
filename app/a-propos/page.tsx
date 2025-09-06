@@ -1,45 +1,46 @@
 // app/a-propos/page.tsx
-// Rôle : exemple de page "marketing" avec metadata locale (utile pour SEO).
-import type { Metadata } from 'next';
-import Breadcrumbs from '@/components/Breadcrumbs';
+import type { Metadata } from "next";
+import Breadcrumbs from "@/components/Breadcrumbs";
+import JsonLd from "@/components/JsonLd";
+import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: 'À propos — LoL Quiz',
-  description: 'En savoir plus sur le projet LoL Quiz et notre mission communautaire.',
-  alternates: { canonical: '/a-propos' },
-  openGraph: {
-    title: 'À propos — LoL Quiz',
-    description: 'En savoir plus sur le projet LoL Quiz et notre mission communautaire.',
-    url: '/a-propos',
-    type: 'website',
-  },
+  title: "À propos — LoL Quiz",
+  description: "En savoir plus sur le projet LoL Quiz et notre mission communautaire.",
+  alternates: { canonical: "/a-propos" },
 };
 
 export default function AProposPage() {
-  // JSON-LD breadcrumb
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'BreadcrumbList',
-    itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Accueil', item: '/' },
-      { '@type': 'ListItem', position: 2, name: 'À propos' },
-    ],
+  const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const crumbs = breadcrumbJsonLd([
+    { name: "Accueil", item: `${SITE}/` },
+    { name: "À propos", item: `${SITE}/a-propos` },
+  ]);
+  const ABOUT = {
+    "@context": "https://schema.org",
+    "@type": "AboutPage",
+    name: "À propos — LoL Quiz",
+    url: `${SITE}/a-propos`,
+    isPartOf: { "@type": "WebSite", name: "LoL Quiz", url: SITE },
+    description:
+      "En savoir plus sur le projet LoL Quiz et notre mission communautaire.",
   };
 
   return (
-    <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <div className="mx-auto max-w-6xl px-3 sm:px-4 pt-4">
-        <Breadcrumbs items={[{ label: 'Accueil', href: '/' }, { label: 'À propos' }]} />
-      </div>
+    <section className="container-lg space-y-6">
+      <JsonLd data={crumbs} />
+      <JsonLd data={ABOUT} />
 
-      <section className="prose prose-invert max-w-none">
+      <Breadcrumbs items={[{ label: "Accueil", href: "/" }, { label: "À propos" }]} />
+
+      <div className="prose prose-invert max-w-none">
         <h2>À propos</h2>
         <p>
-          LoL Quiz est un projet communautaire visant à proposer des mini-jeux amusants autour de League of Legends.
-          Performance, accessibilité et SEO sont au cœur du site.
+          LoL Quiz est un projet communautaire visant à proposer des mini-jeux
+          amusants autour de League of Legends. Performance, accessibilité et
+          SEO sont au cœur du site.
         </p>
-      </section>
-    </>
+      </div>
+    </section>
   );
 }

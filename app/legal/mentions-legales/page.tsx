@@ -1,6 +1,8 @@
 // app/legal/mentions-legales/page.tsx
 import type { Metadata } from "next";
 import Breadcrumbs from "@/components/Breadcrumbs";
+import JsonLd from "@/components/JsonLd";
+import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "Mentions légales | LoL Quiz",
@@ -17,18 +19,24 @@ export const metadata: Metadata = {
 };
 
 export default function MentionsLegalesPage() {
-  const jsonLd = {
-    '@context': 'https://schema.org',
-    '@type': 'BreadcrumbList',
-    itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Accueil', item: '/' },
-      { '@type': 'ListItem', position: 2, name: 'Mentions légales' },
-    ],
+  const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const crumbs = breadcrumbJsonLd([
+    { name: "Accueil", item: `${SITE}/` },
+    { name: "Mentions légales", item: `${SITE}/legal/mentions-legales` },
+  ]);
+  const LEGAL = {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: "Mentions légales | LoL Quiz",
+    url: `${SITE}/legal/mentions-legales`,
+    isPartOf: { "@type": "WebSite", name: "LoL Quiz", url: SITE },
   };
 
   return (
     <section className="container-lg space-y-6">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <JsonLd data={crumbs} />
+      <JsonLd data={LEGAL} />
+
       <Breadcrumbs items={[{ label: "Accueil", href: "/" }, { label: "Mentions légales" }]} />
 
       <header className="space-y-2">

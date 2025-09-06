@@ -1,6 +1,6 @@
 // scripts/predeploy.mjs
 // -------------------------------------------------------------
-// Pré-déploiement Next.js (Windows-friendly, auto-port, sitemap-aware)
+// Pré-déploiement Next.js (Windows-friendly, sitemap-aware)
 // 1) Lint + Typecheck
 // 2) Build prod
 // 3) Start prod local sur un PORT LIBRE
@@ -22,6 +22,16 @@ const REPORTS_DIR = path.join(process.cwd(), "reports");
 const USE_LIGHTHOUSE = !process.argv.includes("--no-lighthouse");
 const LIGHTHOUSE_ONLY = process.argv.includes("--lighthouse-only");
 const RESERVE_3000 = process.argv.includes("--reserve-3000");
+
+// Endpoints non-HTML à ignorer pour Lighthouse (et parfois pour les pings LH)
+const EXCLUDE_PATTERNS = [
+  /\/opengraph-image(?:\.png)?$/i,
+  /\/twitter-image(?:\.png)?$/i,
+  /\/icon(?:\.png|\.ico)?$/i,
+  /\/apple-touch-icon(?:\.png)?$/i,
+  /\/apple-icon(?:\.png)?$/i,
+  /\/manifest\.webmanifest$/i,
+];
 
 const ok = (m) => console.log(`✅ ${m}`);
 const info = (m) => console.log(`ℹ️  ${m}`);
@@ -83,8 +93,9 @@ function parseCSP(value) {
   return map;
 }
 function checkCSP(map) {
-  // Vérif légère (pas bloquante) : on signale seulement les manques fréquents
+  // Vérif légère (non bloquante) : on signale juste des oublis fréquents
   const issues = [];
+
   const img = map.get("img-src");
   const needImgs = [
     "'self'",
@@ -176,7 +187,10 @@ async function runLighthouse(url, outHtml) {
         "seo",
       ],
     });
-    await writeFile(outHtml, result.report);
+
+    const report = Array.isArray(result.report) ? result.report[0] : result.report;
+    await writeFile(outHtml, report);
+
     const scores = Object.fromEntries(
       Object.entries(result.lhr.categories).map(([k, v]) => [
         k,
@@ -197,18 +211,20 @@ function sanitizeForFile(u) {
     .replace(/[\/]+/g, "_");
 }
 
+// Filtre heuristique des URLs HTML (pattern + exclusion connue)
 function isHtmlLike(u) {
-  // Exclut API + assets connus pour Lighthouse ; garde les pages HTML
-  return (
-    !/\/api\//.test(u) &&
-    !/\.(ico|png|jpg|jpeg|svg|webp|avif|txt|xml|json|js|css)$/i.test(u)
-  );
+  if (EXCLUDE_PATTERNS.some((re) => re.test(u))) return false;
+  if (/\/api\//i.test(u)) return false;
+  if (/\.(ico|png|jpg|jpeg|svg|webp|avif|txt|xml|json|js|css)$/i.test(u)) return false;
+  return true;
 }
 
 /** Auto-découverte des routes via sitemap (avec fallback statique). */
 async function getRoutesToAudit(baseUrl) {
   try {
-    const indexXml = await (await fetch(`${baseUrl}/sitemap.xml`)).text();
+    const indexRes = await fetch(`${baseUrl}/sitemap.xml`, { cache: "no-store" });
+    if (!indexRes.ok) throw new Error("no sitemap");
+    const indexXml = await indexRes.text();
     const locsIndex = [...indexXml.matchAll(/<loc>(.*?)<\/loc>/g)].map((m) => m[1]);
 
     const sitemapXmls = locsIndex.filter((u) => u.endsWith(".xml"));
@@ -217,7 +233,7 @@ async function getRoutesToAudit(baseUrl) {
     if (sitemapXmls.length > 0) {
       for (const sm of sitemapXmls) {
         const smUrlLocal = sm.replace(/^https?:\/\/[^/]+/i, baseUrl);
-        const xml = await (await fetch(smUrlLocal)).text();
+        const xml = await (await fetch(smUrlLocal, { cache: "no-store" })).text();
         const locs = [...xml.matchAll(/<loc>(.*?)<\/loc>/g)].map((m) => m[1]);
         pages.push(...locs.map((u) => u.replace(/^https?:\/\/[^/]+/i, baseUrl)));
       }
@@ -312,7 +328,7 @@ async function getRoutesToAudit(baseUrl) {
             warnings++;
             warn(`Page KO (${r.status}) · ${u}`);
           }
-        } catch (e) {
+        } catch {
           warnings++;
           warn(`Page KO (fetch error) · ${u}`);
         }
@@ -325,6 +341,19 @@ async function getRoutesToAudit(baseUrl) {
         let n = 0;
 
         for (const u of pagesHtml) {
+          // Double garde : on HEAD la page pour s’assurer que c’est du HTML
+          try {
+            const head = await fetch(u, { method: "HEAD", cache: "no-store" });
+            const ct = (head.headers.get("content-type") || "").toLowerCase();
+            if (!ct.startsWith("text/html")) {
+              info(`(skip LH) ${u} — content-type=${ct || "n/a"}`);
+              continue;
+            }
+          } catch {
+            info(`(skip LH) ${u} — HEAD failed`);
+            continue;
+          }
+
           const out = path.join(
             REPORTS_DIR,
             `lighthouse-${Date.now()}-${sanitizeForFile(u)}.html`
