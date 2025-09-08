@@ -34,6 +34,14 @@ export default function GamesIndex() {
             Chrono-Break
           </Link>
         </li>
+         <li>
+          <Link
+            href="/games/skins"
+            className="block rounded-lg ring-1 ring-white/10 bg-white/5 hover:bg-white/10 px-4 py-3"
+          >
+            Skin Finder
+          </Link>
+        </li>
       </ul>
     </main>
   );

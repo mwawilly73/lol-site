@@ -179,7 +179,15 @@ export default function SiteHeader() {
                   onClick={() => setOpenGamesDesktop(false)}
                   role="menuitem"
                 >
-                  Chrono des champions
+                  Chrono Breaker
+                </Link>
+                <Link
+                  href="/games/skins"
+                  className="block rounded-md px-3 py-2 text-sm hover:bg-white/10"
+                  onClick={() => setOpenGamesDesktop(false)}
+                  role="menuitem"
+                >
+                  Skin Finder
                 </Link>
               </div>
             )}

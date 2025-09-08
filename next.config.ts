@@ -9,7 +9,7 @@ const allowPlausible = !!process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
 const allowAds = !!process.env.NEXT_PUBLIC_ADSENSE_PUB_ID;
 
 // Vercel Live feedback : autorisé UNIQUEMENT en Preview
-const allowVercelLive = isPreview;
+const allowVercelLive = process.env.NEXT_PUBLIC_ALLOW_VERCEL_LIVE === "1" || isPreview;
 
 function buildCsp(): string {
   const scriptSrc = [

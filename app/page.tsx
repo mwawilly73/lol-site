@@ -99,6 +99,13 @@ export default function HomePage() {
               imageUrl="https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Zilean_6.jpg"
             />
 
+            <GameCard
+              href="/games/skins"
+              title="Skin Finder"
+              subtitle="Trouve tous les skins à partir de leur splash"
+              imageUrl="https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Shaco_44.jpg"
+            />
+
 
             {/* Placeholder pour futurs jeux */}
             <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 bg-white/5 p-6 flex items-center">
