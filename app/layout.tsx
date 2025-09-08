@@ -15,7 +15,12 @@ import ClientMount from "@/components/ClientMount";
 import JsonLd from "@/components/JsonLd";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+// app/layout.tsx (tout en haut, avant metadata)
+const rawHost =
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
+const SITE_URL = rawHost;
 const isPreview = process.env.VERCEL_ENV === "preview";
 
 
@@ -64,6 +69,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="theme-color" content="#0e1117" />
         {/* Noindex explicite en PREVIEW (ceinture+bretelles avec le header) */}
         {isPreview ? <meta name="robots" content="noindex, nofollow, noarchive" /> : null}
+
+        {/* Vérif AdSense sans script (OK avec ton CMP) */}
+        {process.env.NEXT_PUBLIC_ADSENSE_PUB_ID ? (
+        <meta
+          name="google-adsense-account"
+          content={`ca-${process.env.NEXT_PUBLIC_ADSENSE_PUB_ID}`} // ex: ca-pub-1234567890123456
+        />
+        ) : null}        
 
         {/* JSON-LD globaux */}
         <JsonLd data={ORG} />

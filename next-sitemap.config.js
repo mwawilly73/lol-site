@@ -2,8 +2,9 @@
 const isProd = process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production';
 
 module.exports = {
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://example.com",
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || "https://legendsrift.com",
   generateRobotsTxt: isProd, // ✅ robots.txt écrit seulement en prod (sinon robots.ts fera foi)
+  changefreq: 'weekly',
   sitemapSize: 7000,
 
   // Optionnel: exclure opengraph-image/icônes pour alléger
