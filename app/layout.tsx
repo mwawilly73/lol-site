@@ -14,6 +14,7 @@ import AdSenseAuto from "@/components/AdSenseAuto";
 import ClientMount from "@/components/ClientMount";
 import JsonLd from "@/components/JsonLd";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 
 // app/layout.tsx (tout en haut, avant metadata)
 const rawHost =
@@ -121,6 +122,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         {/* ⬇️ Speed Insights : place parfaite */}
         <SpeedInsights />
+
+        {/* ⬇️ Vercel Analytics (optionnel) */}
+        <Analytics />
         
       </body>
     </html>

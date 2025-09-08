@@ -2,8 +2,8 @@
   "redirects": [
     {
       "source": "/(.*)",
-      "has": [{ "type": "host", "value": "www.votredomaine.fr" }],
-      "destination": "https://votredomaine.fr/$1",
+      "has": [{ "type": "host", "value": "www.legendsrift.com" }],
+      "destination": "https://legendsrift.com/$1",
       "permanent": true
     }
   ]
