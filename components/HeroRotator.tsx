@@ -74,7 +74,7 @@ export default function HeroRotator({
     return (
       <div className={`relative rounded-2xl ring-1 ring-white/10 bg-white/5 ${className}`}>
         <div className="px-4 py-10 text-center">
-          <h1 className="text-2xl font-bold">LoL Quiz</h1>
+          <h1 className="text-2xl font-bold">Legends Rift</h1>
           <p className="text-white/80 mt-1">Bienvenue !</p>
           {children}
         </div>

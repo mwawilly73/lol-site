@@ -6,7 +6,7 @@ import JsonLd from "@/components/JsonLd";
 import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Politique de confidentialité | LoL Quiz",
+  title: "Politique de confidentialité | Legends Rift",
   description:
     "Comment nous traitons vos données, les cookies essentiels, et l'option de publicités personnalisées.",
   alternates: { canonical: "/legal/confidentialite" },
@@ -21,9 +21,9 @@ export default function ConfidentialitePage() {
   const PRIVACY = {
     "@context": "https://schema.org",
     "@type": "PrivacyPolicy",
-    name: "Politique de confidentialité | LoL Quiz",
+    name: "Politique de confidentialité | Legends Rift",
     url: `${SITE}/legal/confidentialite`,
-    isPartOf: { "@type": "WebSite", name: "LoL Quiz", url: SITE },
+    isPartOf: { "@type": "WebSite", name: "Legends Rift", url: SITE },
   };
 
   return (
@@ -55,7 +55,7 @@ export default function ConfidentialitePage() {
       <h2>Contact</h2>
       <p>
         Pour toute question liée à la confidentialité :{" "}
-        <a href="mailto:contact@example.com">contact@example.com</a>.
+        <a href="mailto:contact.legendsrift@gmail.com">contact.legendsrift@gmail.com</a>.
       </p>
     </section>
   );

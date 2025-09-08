@@ -26,12 +26,12 @@ const isPreview = process.env.VERCEL_ENV === "preview";
 
 
 export const metadata: Metadata = {
-  title: "LoL Quiz — Accueil",
+  title: "Legends Rift — Accueil",
   description:
     "Jeux et quiz autour des champions de League of Legends. Devine les champions, découvre leurs rôles, et entraîne ta mémoire !",
   metadataBase: new URL(SITE_URL),
   openGraph: {
-    title: "LoL Quiz",
+    title: "Legends Rift",
     description:
       "Jeux et quiz autour des champions de League of Legends. Devine les champions et entraîne ta mémoire !",
     type: "website",
@@ -46,7 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const ORG = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "LoL Quiz",
+    name: "Legends Rift",
     url: SITE_URL,
     logo: `${SITE_URL}/icon.png`,
   };
@@ -54,7 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const WEBSITE = {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    name: "LoL Quiz",
+    name: "Legends Rift",
     url: SITE_URL,
   };
 

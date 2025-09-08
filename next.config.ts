@@ -8,12 +8,19 @@ const isPreview = process.env.VERCEL_ENV === "preview";
 const allowPlausible = !!process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
 const allowAds = !!process.env.NEXT_PUBLIC_ADSENSE_PUB_ID;
 
+// Vercel Live feedback : autorisé UNIQUEMENT en Preview
+const allowVercelLive = isPreview;
+
 function buildCsp(): string {
   const scriptSrc = [
     "'self'",
-    "'unsafe-inline'", // pragmatique (sinon mettre un nonce)
+    "'unsafe-inline'", // pragmatique tant qu’on ne met pas de nonce
     ...(allowPlausible ? ["https://plausible.io"] : []),
     ...(allowAds ? ["https://pagead2.googlesyndication.com"] : []),
+    // Funding Choices (CMP AdSense)
+    ...(allowAds ? ["https://fundingchoicesmessages.google.com"] : []),
+    // Vercel Live feedback (preview uniquement)
+    ...(allowVercelLive ? ["https://vercel.live"] : []),
   ];
 
   const imgSrc = [
@@ -35,14 +42,26 @@ function buildCsp(): string {
     "'self'",
     "https://ddragon.leagueoflegends.com",
     "https://raw.communitydragon.org",
-     "https://vitals.vercel-insights.com",
+    "https://vitals.vercel-insights.com", // Speed Insights
     ...(allowPlausible ? ["https://plausible.io"] : []),
-    ...(allowAds ? ["https://googleads.g.doubleclick.net"] : []),
+    ...(allowAds
+      ? [
+          "https://googleads.g.doubleclick.net",
+          "https://fundingchoicesmessages.google.com",
+        ]
+      : []),
+    ...(allowVercelLive ? ["https://vercel.live"] : []),
   ];
 
   const frameSrc = [
     "'self'",
-    ...(allowAds ? ["https://googleads.g.doubleclick.net", "https://tpc.googlesyndication.com"] : []),
+    ...(allowAds
+      ? [
+          "https://googleads.g.doubleclick.net",
+          "https://tpc.googlesyndication.com",
+          "https://fundingchoicesmessages.google.com",
+        ]
+      : []),
   ];
 
   const directives = [
@@ -52,6 +71,8 @@ function buildCsp(): string {
     "frame-ancestors 'self'",
     "object-src 'none'",
     `script-src ${scriptSrc.join(" ")}`,
+    // Optionnel : dupliquer pour certains navigateurs stricts
+    `script-src-elem ${scriptSrc.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src ${imgSrc.join(" ")}`,
     "font-src 'self' data:",
@@ -72,11 +93,11 @@ const securityHeadersProd = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
-  // ➕ NoIndex automatique en PREVIEW
+  // NoIndex automatique en PREVIEW
   ...(isPreview ? [{ key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" }] : []),
 ];
 
-// Helper qui force le littéral "https"
+// Helper forçant le littéral "https"
 const rpHttps = (hostname: string, pathname: string = "/**"): RemotePattern => ({
   protocol: "https",
   hostname,
@@ -102,7 +123,7 @@ const nextConfig: NextConfig = {
     remotePatterns,
   },
   async headers() {
-    if (isDev) return []; // en dev: pas de headers de sécu (HMR/WS)
+    if (isDev) return []; // en dev, pas de headers de sécu (HMR/WS)
     return [
       {
         source: "/:path*",

@@ -137,7 +137,7 @@ export default function SiteHeader() {
       <div className="mx-auto max-w-6xl px-3 sm:px-4 py-3 md:py-4 flex items-center justify-between">
         {/* Logo / Titre du site */}
         <Link href="/" className="text-white font-semibold tracking-wide">
-          LoL Quiz
+          Legends Rift
         </Link>
 
         {/* Nav desktop */}

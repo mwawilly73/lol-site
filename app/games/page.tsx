@@ -5,7 +5,7 @@
 // - Chrono-Break
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const metadata = { title: "Jeux — LoL Quiz" };
+export const metadata = { title: "Jeux — Legends Rift" };
 
 import Link from "next/link";
 import Breadcrumbs from "@/components/Breadcrumbs";

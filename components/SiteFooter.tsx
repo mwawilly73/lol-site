@@ -14,7 +14,7 @@ export default function SiteFooter() {
         <div className="mx-auto max-w-6xl px-3 sm:px-4 py-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-white/70">
-              © {year} LoL Quiz. Projet fan-made non affilié à Riot Games.
+              © {year} Legends Rift. Projet fan-made non affilié à Riot Games.
             </div>
             <nav aria-label="Liens de pied de page" className="flex flex-wrap items-center gap-3">
               <Link className="hover:text-white transition-colors" href="/">Accueil</Link>

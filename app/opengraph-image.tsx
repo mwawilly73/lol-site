@@ -3,7 +3,7 @@ import { ImageResponse } from "next/og";
 export const runtime = "edge";
 export const contentType = "image/png";
 export const size = { width: 1200, height: 630 };
-export const alt = "LoL Quiz — Jeux & quiz sur les champions";
+export const alt = "Legends Rift — Jeux & quiz sur les champions";
 
 export default function OG() {
   const W = size.width;
@@ -73,7 +73,7 @@ export default function OG() {
                 boxShadow: "0 8px 40px rgba(99,102,241,.35)",
               }}
             >
-              LQ
+              LR
             </div>
             <div style={{ display: "flex", flexDirection: "column" }}>
               <div
@@ -83,7 +83,7 @@ export default function OG() {
                   opacity: 0.9,
                 }}
               >
-                LoL Quiz
+                Legends Rift
               </div>
               <div style={{ fontSize: 16, opacity: 0.7 }}>
                 Jeux & quiz sur les champions
@@ -110,7 +110,7 @@ export default function OG() {
                 textShadow: "0 10px 32px rgba(0,0,0,.55)",
               }}
             >
-              Bienvenue sur LoL Quiz
+              Bienvenue sur Legends Rift
             </div>
             <div
               style={{
@@ -174,7 +174,7 @@ export default function OG() {
                 boxShadow: "0 8px 32px rgba(99,102,241,.35)",
               }}
             />
-            <div style={{ fontSize: 20, opacity: 0.9 }}>lol-quiz.app</div>
+            <div style={{ fontSize: 20, opacity: 0.9 }}>Legends Rift.app</div>
           </div>
         </div>
       ),
@@ -196,7 +196,7 @@ export default function OG() {
             fontFamily: "Arial, sans-serif",
           }}
         >
-          LoL Quiz — Jeux & quiz
+          Legends Rift — Jeux & quiz
         </div>
       ),
       { ...size }

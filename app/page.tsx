@@ -4,12 +4,12 @@ import HeroRotator from "@/components/HeroRotator";
 import GameCard from "@/components/GameCard";
 
 export const metadata: Metadata = {
-  title: "LoL Quiz — Accueil",
+  title: "Legends Rift — Accueil",
   description:
     "Jeux et quiz autour des champions de League of Legends. Devine les champions et entraîne ta mémoire !",
   alternates: { canonical: "/" },
   openGraph: {
-    title: "LoL Quiz — Accueil",
+    title: "Legends Rift — Accueil",
     description:
       "Jeux et quiz autour des champions de League of Legends. Devine les champions et entraîne ta mémoire !",
     url: "/",
@@ -22,7 +22,7 @@ export default function HomePage() {
   const orgJsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    name: "LoL Quiz",
+    name: "Legends Rift",
     url: process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
     logo: "/icon.png",
   };
@@ -64,7 +64,7 @@ export default function HomePage() {
         <HeroRotator images={HERO_IMGS} intervalMs={5000}>
           <div className="text-center drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]">
             <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight">
-              Bienvenue sur <span className="text-indigo-300">LoL Quiz</span>
+              Bienvenue sur <span className="text-indigo-300">Legends Rift</span>
             </h1>
             <p className="mt-2 text-sm sm:text-lg text-white/85">
               Entraîne ta mémoire avec des mini-jeux autour des champions.

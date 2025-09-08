@@ -506,10 +506,10 @@ export default function ChampionsChrono({
     const base = mode === "chrono" ? "au chrono" : "en mode libre";
     // ⬇️ Corrigé : temps écoulé en mode chrono = chronoDuration - ms
     const elapsed = mode === "chrono" ? (chronoDuration - ms) : ms;
-    const text = `J’ai fait ${solved} ${base} en ${formatTime(elapsed)} sur LoL Quiz !`;
+    const text = `J’ai fait ${solved} ${base} en ${formatTime(elapsed)} sur Legends Rift !`;
     try {
       if (navigator.share) {
-        await navigator.share({ text, url: window.location.href, title: "LoL Quiz — Chrono-Break" });
+        await navigator.share({ text, url: window.location.href, title: "Legends Rift — Chrono-Break" });
       } else {
         await navigator.clipboard.writeText(`${text} ${window.location.href}`);
         alert("Score copié dans le presse-papiers !");

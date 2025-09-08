@@ -5,14 +5,14 @@ import JsonLd from "@/components/JsonLd";
 import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Mentions légales | LoL Quiz",
+  title: "Mentions légales | Legends Rift",
   description:
-    "Mentions légales du site LoL Quiz : éditeur, contact, propriété intellectuelle et mentions relatives à Riot Games.",
+    "Mentions légales du site Legends Rift : éditeur, contact, propriété intellectuelle et mentions relatives à Riot Games.",
   alternates: { canonical: "/legal/mentions-legales" },
   openGraph: {
-    title: "Mentions légales | LoL Quiz",
+    title: "Mentions légales | Legends Rift",
     description:
-      "Mentions légales du site LoL Quiz : éditeur, contact, propriété intellectuelle et mentions relatives à Riot Games.",
+      "Mentions légales du site Legends Rift : éditeur, contact, propriété intellectuelle et mentions relatives à Riot Games.",
     url: "/legal/mentions-legales",
     type: "article",
   },
@@ -27,9 +27,9 @@ export default function MentionsLegalesPage() {
   const LEGAL = {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    name: "Mentions légales | LoL Quiz",
+    name: "Mentions légales | Legends Rift",
     url: `${SITE}/legal/mentions-legales`,
-    isPartOf: { "@type": "WebSite", name: "LoL Quiz", url: SITE },
+    isPartOf: { "@type": "WebSite", name: "Legends Rift", url: SITE },
   };
 
   return (
@@ -51,17 +51,17 @@ export default function MentionsLegalesPage() {
         <section className="space-y-1">
           <h2 className="text-lg font-semibold text-white">Éditeur du site</h2>
           <p>
-            <strong>LoL Quiz</strong> — Projet fan-made, non affilié à Riot Games.
+            <strong>Legends Rift</strong> — Projet fan-made, non affilié à Riot Games.
           </p>
           <p>
-            Contact&nbsp;: <em>à compléter</em> (adresse e-mail ou formulaire de contact).
+            <strong>Contact&nbsp;</strong> — contact.legendsrift@gmail.com
           </p>
         </section>
 
         <section className="space-y-1">
           <h2 className="text-lg font-semibold text-white">Hébergement</h2>
           <p>
-            Hébergeur&nbsp;: <em>à compléter</em> (nom, adresse, téléphone de l’hébergeur
+            <strong>Hébergeur</strong> — <em>à compléter</em> (nom, adresse, téléphone de l’hébergeur
             selon votre prestataire de déploiement).
           </p>
         </section>
@@ -74,7 +74,7 @@ export default function MentionsLegalesPage() {
           </p>
           <p>
             League of Legends et Riot Games sont des marques ou des marques déposées de Riot
-            Games, Inc. LoL&nbsp;Quiz est un projet non officiel, non affilié et non soutenu
+            Games, Inc. Legends Rift est un projet non officiel, non affilié et non soutenu
             par Riot Games.
           </p>
         </section>

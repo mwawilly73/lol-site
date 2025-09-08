@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-#  .gitignore — LoL Quiz (Next.js + TypeScript)
+#  .gitignore — Legends Rift (Next.js + TypeScript)
 #  But : ignorer tout ce qui ne doit PAS être versionné.
 #  ⚠️ Ne PAS ignorer le lockfile (package-lock.json) : garde-le !
 # ─────────────────────────────────────────────────────────────

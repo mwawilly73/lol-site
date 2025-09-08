@@ -5,8 +5,8 @@ import JsonLd from "@/components/JsonLd";
 import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "À propos — LoL Quiz",
-  description: "En savoir plus sur le projet LoL Quiz et notre mission communautaire.",
+  title: "À propos — Legends Rift",
+  description: "En savoir plus sur le projet Legends Rift et notre mission communautaire.",
   alternates: { canonical: "/a-propos" },
 };
 
@@ -19,11 +19,11 @@ export default function AProposPage() {
   const ABOUT = {
     "@context": "https://schema.org",
     "@type": "AboutPage",
-    name: "À propos — LoL Quiz",
+    name: "À propos — Legends Rift",
     url: `${SITE}/a-propos`,
-    isPartOf: { "@type": "WebSite", name: "LoL Quiz", url: SITE },
+    isPartOf: { "@type": "WebSite", name: "Legends Rift", url: SITE },
     description:
-      "En savoir plus sur le projet LoL Quiz et notre mission communautaire.",
+      "En savoir plus sur le projet Legends Rift et notre mission communautaire.",
   };
 
   return (
@@ -36,7 +36,7 @@ export default function AProposPage() {
       <div className="prose prose-invert max-w-none">
         <h2>À propos</h2>
         <p>
-          LoL Quiz est un projet communautaire visant à proposer des mini-jeux
+          Legends Rift est un projet communautaire visant à proposer des mini-jeux
           amusants autour de League of Legends. Performance, accessibilité et
           SEO sont au cœur du site.
         </p>

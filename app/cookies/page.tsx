@@ -7,12 +7,12 @@ import JsonLd from "@/components/JsonLd";
 import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Cookies | LoL Quiz",
+  title: "Cookies | Legends Rift",
   description:
     "Gérez vos préférences de cookies : fonctionnalités essentielles, mesure d’audience et publicité personnalisée.",
   alternates: { canonical: "/cookies" },
   openGraph: {
-    title: "Cookies | LoL Quiz",
+    title: "Cookies | Legends Rift",
     description:
       "Gérez vos préférences de cookies : fonctionnalités essentielles, mesure d’audience et publicité personnalisée.",
     url: "/cookies",
@@ -29,9 +29,9 @@ export default function CookiesPage() {
   const COOKIE_PAGE = {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    name: "Cookies | LoL Quiz",
+    name: "Cookies | Legends Rift",
     url: `${SITE}/cookies`,
-    isPartOf: { "@type": "WebSite", name: "LoL Quiz", url: SITE },
+    isPartOf: { "@type": "WebSite", name: "Legends Rift", url: SITE },
   };
 
   return (

@@ -10,12 +10,12 @@ import JsonLd from "@/components/JsonLd";
 import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Trouve tous les Champions | LoL Quiz",
+  title: "Trouve tous les Champions | Legends Rift",
   description:
     "Écris le nom exact d'un champion de League of Legends pour retourner sa carte. Mode facile : flou NB. Mode normal : débrouille-toi !",
   alternates: { canonical: "/games/champions" },
   openGraph: {
-    title: "Trouve tous les Champions | LoL Quiz",
+    title: "Trouve tous les Champions | Legends Rift",
     description:
       "Écris le nom exact d'un champion de League of Legends pour retourner sa carte.",
     url: "/games/champions",
@@ -37,7 +37,7 @@ export default async function ChampionsPage() {
     "@type": "CollectionPage",
     name: "Liste des champions",
     url: `${SITE_URL}/games/champions`,
-    isPartOf: { "@type": "WebSite", name: "LoL Quiz", url: SITE_URL },
+    isPartOf: { "@type": "WebSite", name: "Legends Rift", url: SITE_URL },
     about: { "@type": "Thing", name: "Champions de League of Legends" },
   };
 

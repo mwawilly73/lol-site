@@ -10,11 +10,11 @@ import JsonLd from "@/components/JsonLd";
 import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Chrono-Break — LoL Quiz",
+  title: "Chrono-Break — Legends Rift",
   description: "Devine les champions grâce à leurs skins/splashes avec un chrono.",
   alternates: { canonical: "/games/chrono" },
   openGraph: {
-    title: "Chrono-Break — LoL Quiz",
+    title: "Chrono-Break — Legends Rift",
     description: "Devine les champions grâce à leurs skins/splashes avec un chrono.",
     url: "/games/chrono",
     type: "website",

@@ -1,4 +1,4 @@
-# LoL Quiz
+# Legends Rift
 
 Jeu et quiz autour des champions de League of Legends.  
 ➡️ Page du jeu principale : `/games/champions`
