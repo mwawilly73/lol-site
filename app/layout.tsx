@@ -84,7 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <JsonLd data={WEBSITE} />
       </head>
 
-      <body className="min-h-dvh bg-[#0e1117] text-white antialiased">
+      <body className="min-h-dvh bg-[#0e1117] text-white antialiased overflow-y-scroll">
         {/* 🛟 Garde-fou CSS si les styles ne chargent pas */}
         <CssGuard />
 
