@@ -6,7 +6,6 @@ import type { Metadata } from "next";
 import { getChampionsFromCDN, type ChampionMeta } from "@/lib/champions";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import SkinFinder from "@/components/SkinFinder";
-import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "Skin Finder — Legends Rift",
@@ -21,13 +20,6 @@ export const metadata: Metadata = {
 };
 
 export default async function SkinFinderPage() {
-  const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  
-  const crumbs = breadcrumbJsonLd([
-    { name: "Accueil", item: `${SITE_URL}/` },
-    { name: "Jeux", item: `${SITE_URL}/games` },
-    { name: "Skin Finder", item: `${SITE_URL}/games/skins` },
-  ]);
 
   let champions: ChampionMeta[] = [];
   try {

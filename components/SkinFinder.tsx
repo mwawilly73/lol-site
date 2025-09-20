@@ -396,15 +396,6 @@ export default function SkinFinder({ initialChampions }: { initialChampions: Cha
   }, [started, current?.id, version, roster.length]);
 
   /* ------------ Chrono ------------ */
-  const formatTime = useCallback((t: number) => {
-    const val = mode === "chrono" ? Math.max(0, t) : t;
-    const s = Math.floor(val / 1000);
-    const mm = Math.floor(s / 60).toString().padStart(2, "0");
-    const ss = (s % 60).toString().padStart(2, "0");
-    const ds = Math.floor((val % 1000) / 100).toString();
-    return `${mm}:${ss}.${ds}`;
-  }, [mode]);
-
   const resetRun = useCallback(() => {
     setIdx(0);
     setInput("");
