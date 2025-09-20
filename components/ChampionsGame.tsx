@@ -136,7 +136,8 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
   const [hintBySlug, setHintBySlug] = useState<Record<string, number>>({});
 
   const headerInputRef = useRef<HTMLInputElement>(null);
-  const compactInputRef = useRef<HTMLInputElement>(null); // gardé pour desktop (si jamais utilisé ailleurs)
+  const compactInputRef = useRef<HTMLInputElement>(null); // gardé si réutilisé
+  const padInputRef = useRef<HTMLInputElement>(null);     // input du panneau
 
   const [lastTry, setLastTry] = useState<string>("");
   const [lastResult, setLastResult] = useState<string>("—");
@@ -149,7 +150,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
 
   // Sticky progress (via IntersectionObserver)
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const [compactProgress, setCompactProgress] = useState(0); // 0..1
+  const [compactProgress, setCompactProgress] = useState(0); // 0 ou 1 (binaire)
 
   const panelRef = useRef<HTMLDivElement | null>(null);
 
@@ -160,8 +161,39 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
   const loreAbortRef = useRef<AbortController | null>(null);
 
   // PAD (saisie dans le panneau)
-  const padInputRef = useRef<HTMLInputElement>(null);
   const [padGuess, setPadGuess] = useState("");
+
+  /* --------- Nouveaux états d’environnement : mobile & orientation -- */
+  const [isMobile, setIsMobile] = useState(false);
+  const [isLandscape, setIsLandscape] = useState(false);
+
+  useEffect(() => {
+    const updateEnv = () => {
+      const mobile =
+        typeof window !== "undefined" &&
+        window.matchMedia("(pointer: coarse)").matches;
+      const landscape =
+        typeof window !== "undefined" &&
+        window.matchMedia("(orientation: landscape)").matches;
+      setIsMobile(mobile);
+      setIsLandscape(landscape);
+    };
+    updateEnv();
+    window.addEventListener("resize", updateEnv);
+    window.addEventListener("orientationchange", updateEnv);
+    return () => {
+      window.removeEventListener("resize", updateEnv);
+      window.removeEventListener("orientationchange", updateEnv);
+    };
+  }, []);
+
+  // Fermer tous les inputs (masquer le clavier mobile)
+  const blurAllInputs = useCallback((): void => {
+    try { headerInputRef.current?.blur?.(); } catch {}
+    try { compactInputRef.current?.blur?.(); } catch {}
+    try { padInputRef.current?.blur?.(); } catch {}
+    try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
+  }, []);
 
   /* -------------------- Index de recherche en mémo ------------------- */
   const { lookup, shortKeys } = useMemo(
@@ -258,14 +290,23 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     [lookup, revealed, shortKeys]
   );
 
+  // ✅ Ne pas remonter + fermer le clavier mobile après succès
   const validate = (from?: "header" | "compact") => {
     if (!value.trim()) return;
-    if (tryReveal(value)) {
-      const wantCompact = from === "compact" || compactProgress >= 0.8;
-      const target = wantCompact ? compactInputRef.current : headerInputRef.current;
-      try { target?.focus?.({ preventScroll: true }); } catch { target?.focus?.(); }
+    const success = tryReveal(value);
+
+    if (success) {
+      if (isMobile) {
+        blurAllInputs(); // masque clavier mobile
+      } else {
+        if (from === "header") {
+          try { headerInputRef.current?.focus?.({ preventScroll: true }); } catch { headerInputRef.current?.focus?.(); }
+        } else if (from === "compact") {
+          try { compactInputRef.current?.focus?.({ preventScroll: true }); } catch { compactInputRef.current?.focus?.(); }
+        }
+      }
     } else {
-      if (from === "compact" || compactProgress >= 0.8) {
+      if (from === "compact" || compactProgress >= 1) {
         try { compactInputRef.current?.focus?.({ preventScroll: true }); }
         catch { compactInputRef.current?.focus?.(); }
       } else {
@@ -278,6 +319,32 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
 
   const onKeyDownHeader = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") { e.preventDefault(); validate("header"); }
+  };
+
+  /* -------------------------- Saisie panneau (PAD) ------------------ */
+  // Remplace validateFromPad (qui n'existe pas) par une version locale sûre
+  const handlePadValidate = () => {
+    const raw = padGuess;
+    if (!raw.trim()) {
+      try { padInputRef.current?.focus?.({ preventScroll: true }); }
+      catch { padInputRef.current?.focus?.(); }
+      return;
+    }
+    const success = tryReveal(raw);
+
+    if (success) {
+      if (isMobile) {
+        blurAllInputs(); // ferme le clavier mobile
+      } else {
+        // Desktop : rester sur le PAD pour enchaîner, sans remonter
+        try { padInputRef.current?.focus?.({ preventScroll: true }); }
+        catch { padInputRef.current?.focus?.(); }
+      }
+    } else {
+      try { padInputRef.current?.focus?.({ preventScroll: true }); }
+      catch { padInputRef.current?.focus?.(); }
+    }
+    setPadGuess("");
   };
 
   /* -------------------------- Sélection carte ----------------------- */
@@ -356,30 +423,19 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     }, 0);
   };
 
-  const validateFromPad = () => {
-    if (!padGuess.trim()) {
-      try { padInputRef.current?.focus?.({ preventScroll: true }); }
-      catch { padInputRef.current?.focus?.(); }
-      return;
-    }
-    if (tryReveal(padGuess)) {
-      try { headerInputRef.current?.focus?.({ preventScroll: true }); } catch { headerInputRef.current?.focus?.(); }
-    } else {
-      try { padInputRef.current?.focus?.({ preventScroll: true }); }
-      catch { padInputRef.current?.focus?.(); }
-    }
-    setPadGuess("");
-  };
-
   /* --------------------- Sticky via IntersectionObserver ------------- */
   useEffect(() => {
     const el = sentinelRef.current;
     if (!el) return;
 
+    // Apparition brutale : binaire 0/1. En paysage, seuil plus haut pour retarder l'affichage.
+    const appearOffset = isLandscape ? 0.55 : 0.20;
+
     const obs = new IntersectionObserver(
       ([entry]) => {
         const ratio = entry?.intersectionRatio ?? 0;
-        const next = Math.min(1, Math.max(0, 1 - ratio));
+        const raw = (1 - ratio - appearOffset) / Math.max(0.0001, (1 - appearOffset));
+        const next = raw >= 1 ? 1 : 0; // binaire
         setCompactProgress((prev) => (prev !== next ? next : prev));
       },
       {
@@ -390,7 +446,9 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
     );
     obs.observe(el);
     return () => obs.disconnect();
-  }, []);
+  }, [isLandscape]);
+
+  const showSticky = compactProgress >= 1;
 
   /* ================================ UI =============================== */
   return (
@@ -420,7 +478,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
 
           {/* Switch + Timer + Actions (desktop/tablette) */}
           <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
-            {/* Mode : caché sur mobile (on libère la place) */}
+            {/* Mode : caché sur mobile */}
             <div className="hidden sm:flex items-center gap-2 shrink-0">
               <span className="text-sm text-white/80">Mode :</span>
               <button
@@ -487,7 +545,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
             <div className="mt-1 text-xs sm:text-sm">{lastResult}</div>
           </div>
 
-          {/* Champ global + Valider (desktop + tablette, visible aussi mobile ici) */}
+          {/* Champ global + Valider */}
           <div className="mt-3 flex items-stretch gap-2 sm:gap-3 min-w-0">
             <label htmlFor="championName" className="sr-only">Nom du champion</label>
             <input
@@ -526,22 +584,24 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
         <div ref={sentinelRef} className="h-4" aria-hidden="true" />
       </div>
 
-      {/* ===== BARRE COMPACTE FIXE (overlay) — allégée pour MOBILE ===== */}
+      {/* ===== STICKY HEADER (compact) — apparition brutale (on/off) ===== */}
       <div
-        className="fixed top-[max(0.5rem,env(safe-area-inset-top))] left-0 right-0 z-40 px-2 sm:px-4 transition-all duration-300 ease-out will-change-[transform,opacity]"
+        className="fixed top-[max(0.5rem,env(safe-area-inset-top))] left-0 right-0 z-40 px-2 sm:px-4"
         style={{
-          opacity: compactProgress,
-          transform: `translateY(${(-8 * (1 - compactProgress)).toFixed(2)}px)`,
-          pointerEvents: compactProgress >= 0.8 ? "auto" : "none",
+          opacity: showSticky ? 1 : 0,
+          visibility: showSticky ? "visible" as const : "hidden" as const,
+          pointerEvents: showSticky ? "auto" as const : "none" as const,
+          transform: showSticky ? "translateY(0)" : "translateY(-8px)",
         }}
+        aria-hidden={showSticky ? undefined : true}
       >
         <div className="mx-auto max-w-6xl">
           <div
             className="rounded-2xl ring-1 ring-white/10 shadow-lg"
             style={{
-              backgroundColor: `rgba(0,0,0,${(0.80 * compactProgress).toFixed(3)})`,
-              backdropFilter: `blur(${(2 + 2 * compactProgress).toFixed(1)}px)`,
-              WebkitBackdropFilter: `blur(${(2 + 2 * compactProgress).toFixed(1)}px)`,
+              backgroundColor: "rgba(0,0,0,0.80)",
+              backdropFilter: "blur(4px)",
+              WebkitBackdropFilter: "blur(4px)",
             }}
           >
             <div className="px-3 sm:px-4 py-2">
@@ -549,7 +609,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
               <div className="min-w-0">
                 <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-green-400 to-emerald-600 transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-green-400 to-emerald-600"
                     style={{ width: `${progress}%` }}
                     role="progressbar"
                     aria-valuemin={0}
@@ -560,7 +620,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                 </div>
               </div>
 
-              {/* Ligne chrono + pause alignée, SANS input ni sélecteur de mode */}
+              {/* Ligne chrono + pause alignée, SANS input */}
               <div className="mt-2 flex items-center gap-2 min-w-0">
                 <div
                   className="rounded px-2 py-1 text-white/90"
@@ -577,10 +637,12 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                   {paused ? "▶" : "⏸"}
                 </button>
 
-                {/* “Dernier essai” compact à droite (prend le reste) */}
-                <div className="ml-auto flex-1 rounded-md border border-white/10 px-2 py-1.5"
-                     style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
-                     aria-live="polite">
+                {/* Dernier essai compact */}
+                <div
+                  className="ml-auto flex-1 rounded-md border border-white/10 px-2 py-1.5"
+                  style={{ backgroundColor: "rgba(255,255,255,0.06)" }}
+                  aria-live="polite"
+                >
                   <div className="sr-only" role="status" aria-live="polite">
                     {lastTry ? `${lastTry}. ${lastResult}` : ""}
                   </div>
@@ -591,8 +653,6 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                   <div className="mt-0.5 text-[11px] sm:text-xs">{lastResult}</div>
                 </div>
               </div>
-
-              {/* ⛔ PAS d’input ni bouton ici pour gagner de la place en mobile */}
             </div>
           </div>
         </div>
@@ -653,7 +713,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                                ring-2 ring-indigo-400/60 shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
                     value={padGuess}
                     onChange={(e) => setPadGuess(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); validateFromPad(); } }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handlePadValidate(); } }}
                   />
                   <button
                     type="button"
@@ -665,7 +725,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                   </button>
                   <button
                     type="button"
-                    onClick={validateFromPad}
+                    onClick={handlePadValidate}
                     className="px-3 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shrink-0"
                   >
                     Valider
@@ -743,7 +803,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                                ring-2 ring-indigo-400/60 shadow-[0_0_0_3px_rgba(99,102,241,0.15)]"
                     value={padGuess}
                     onChange={(e) => setPadGuess(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); validateFromPad(); } }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handlePadValidate(); } }}
                   />
                   <button
                     type="button"
@@ -755,7 +815,7 @@ export default function ChampionsGame({ initialChampions, targetTotal }: Props) 
                   </button>
                   <button
                     type="button"
-                    onClick={validateFromPad}
+                    onClick={handlePadValidate}
                     className="px-3 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shrink-0"
                   >
                     Valider
