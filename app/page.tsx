@@ -67,7 +67,7 @@ export default function HomePage() {
               Quiz LoL : Bienvenue sur <span className="text-indigo-300">Legends Rift</span>
             </h1>
             <p className="mt-2 text-sm sm:text-lg text-white/85">
-              Lance un <strong>quiz LoL</strong> dans l'univers de League Of Legends. <br />
+              Lance un <strong>quiz LoL</strong> dans l’univers de League Of Legends. <br />
               Fautes mineures tolérées, indices, et modes rapides pour s’amuser sur mobile et PC.
             </p>
           </div>
