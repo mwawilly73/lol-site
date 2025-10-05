@@ -284,7 +284,7 @@ export default function SiteHeader() {
                     }}
                     role="menuitem"
                   >
-                    Chrono des champions
+                    Chrono Break
                   </Link>
                   <Link
                     href="/games/skins"
