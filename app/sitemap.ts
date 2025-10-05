@@ -57,6 +57,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.5,
     },
     {
+      url: `${base}/cookies`,
+      lastModified: now,
+      changeFrequency: "monthly",
+      priority: 0.3,
+    },
+    {
       url: `${base}/legal`,
       lastModified: now,
       changeFrequency: "monthly",
