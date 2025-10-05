@@ -9,21 +9,21 @@ const allowPlausible = !!process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
 const allowAds = !!process.env.NEXT_PUBLIC_ADSENSE_PUB_ID;
 // Vercel Live feedback : autorisé UNIQUEMENT en Preview
 const allowVercelLive = process.env.NEXT_PUBLIC_ALLOW_VERCEL_LIVE === "1" || isPreview;
-// ✅ Google Analytics (gtag.js / GA4)
-const allowGA = !!process.env.NEXT_PUBLIC_GA_ID;
+// ✅ Flags Analytics
+const allowGA = !!process.env.NEXT_PUBLIC_GA_ID;       // gtag direct (désactivé ici)
+const allowGTM = !!process.env.NEXT_PUBLIC_GTM_ID;     // GTM
 
 function buildCsp(): string {
+  const allowGtmOrGa = allowGA || allowGTM;
+
   const scriptSrc = [
     "'self'",
-    "'unsafe-inline'", // pragmatique tant qu’on ne met pas de nonce
+    "'unsafe-inline'",
     ...(allowPlausible ? ["https://plausible.io"] : []),
     ...(allowAds ? ["https://pagead2.googlesyndication.com"] : []),
-    // Funding Choices (CMP AdSense)
     ...(allowAds ? ["https://fundingchoicesmessages.google.com"] : []),
-    // Vercel Live feedback (preview uniquement)
     ...(allowVercelLive ? ["https://vercel.live"] : []),
-    // Google Analytics
-    ...(allowGA ? ["https://www.googletagmanager.com"] : []),
+    ...(allowGtmOrGa ? ["https://www.googletagmanager.com"] : []), // GTM/gtag
   ];
 
   const imgSrc = [
@@ -39,40 +39,27 @@ function buildCsp(): string {
           "https://tpc.googlesyndication.com",
         ]
       : []),
-    ...(allowGA ? ["https://www.google-analytics.com"] : []), // ✅ pixel GA
+    ...(allowGA ? ["https://www.google-analytics.com"] : []), // pixel GA (si gtag direct)
   ];
 
   const connectSrc = [
     "'self'",
     "https://ddragon.leagueoflegends.com",
     "https://raw.communitydragon.org",
-    "https://vitals.vercel-insights.com", // Speed Insights
+    "https://vitals.vercel-insights.com",
     ...(allowPlausible ? ["https://plausible.io"] : []),
-    ...(allowAds
-      ? [
-          "https://googleads.g.doubleclick.net",
-          "https://fundingchoicesmessages.google.com",
-        ]
-      : []),
+    ...(allowAds ? ["https://googleads.g.doubleclick.net", "https://fundingchoicesmessages.google.com"] : []),
     ...(allowVercelLive ? ["https://vercel.live"] : []),
-    ...(allowGA
-      ? [
-          "https://www.google-analytics.com",
-          "https://region1.google-analytics.com",
-          "https://www.googletagmanager.com",
-        ]
-      : []), // ✅ GA endpoints
+    ...(allowGtmOrGa ? ["https://www.googletagmanager.com"] : []), // GTM/gtag endpoints
+    ...(allowGA ? ["https://www.google-analytics.com", "https://region1.google-analytics.com"] : []),
   ];
 
   const frameSrc = [
     "'self'",
     ...(allowAds
-      ? [
-          "https://googleads.g.doubleclick.net",
-          "https://tpc.googlesyndication.com",
-          "https://fundingchoicesmessages.google.com",
-        ]
+      ? ["https://googleads.g.doubleclick.net", "https://tpc.googlesyndication.com", "https://fundingchoicesmessages.google.com"]
       : []),
+    ...(allowGTM ? ["https://www.googletagmanager.com"] : []), // noscript iframe GTM
   ];
 
   const directives = [
@@ -82,7 +69,6 @@ function buildCsp(): string {
     "frame-ancestors 'self'",
     "object-src 'none'",
     `script-src ${scriptSrc.join(" ")}`,
-    // Optionnel : dupliquer pour certains navigateurs stricts
     `script-src-elem ${scriptSrc.join(" ")}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src ${imgSrc.join(" ")}`,
@@ -104,7 +90,6 @@ const securityHeadersProd = [
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
   { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
-  // NoIndex automatique en PREVIEW
   ...(isPreview ? [{ key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" }] : []),
 ];
 

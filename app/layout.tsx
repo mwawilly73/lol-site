@@ -1,5 +1,6 @@
 // app/layout.tsx
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import SiteHeader from "@/components/SiteHeader";
 import CssGuard from "@/components/CssGuard";
@@ -7,16 +8,14 @@ import ConsentDomBridge from "@/components/ConsentDomBridge";
 import AnalyticsBridge from "@/components/AnalyticsBridge";
 import SiteFooter from "@/components/SiteFooter";
 import CookieNotice from "@/components/CookieNotice";
-import ConsentGtagBridge from "@/components/ConsentGtagBridge";
-import AnalyticsLoader from "@/components/AnalyticsLoader";
+// 🔕 GA direct désactivé : on retire AnalyticsLoader & GaPageview
+// import ConsentGtagBridge from "@/components/ConsentGtagBridge"; // Optionnel: tu peux l’enlever si tu fais le Consent Mode dans GTM
 import AdsConsentBridge from "@/components/AdsConsentBridge";
 import AdSenseAuto from "@/components/AdSenseAuto";
 import ClientMount from "@/components/ClientMount";
 import JsonLd from "@/components/JsonLd";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
-import GaPageview from "@/components/GaPageview";
-
 
 // Résolution d'URL propre (prod > preview > dev)
 const RAW_HOST =
@@ -26,8 +25,8 @@ const RAW_HOST =
 const SITE_URL = RAW_HOST.replace(/\/+$/, "");
 const isPreview = process.env.VERCEL_ENV === "preview";
 const hasAdsense = !!process.env.NEXT_PUBLIC_ADSENSE_PUB_ID;
+const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID; // ✅ GTM only
 
-// (Optionnel) Déclare un viewport explicite
 export const viewport: Viewport = {
   themeColor: "#0e1117",
   width: "device-width",
@@ -37,8 +36,8 @@ export const viewport: Viewport = {
 // Métadonnées globales
 const siteName = "Legends Rift";
 const defaultTitle = "Legends Rift — Jeux & Quiz League of Legends";
-const defaultDesc = "Quiz LoL (League of Legends) en français : devine les champions et leurs spells, révise le lore et les rôles. Jouable sur mobile et PC, avec indices et fautes mineures tolérées.";
-
+const defaultDesc =
+  "Quiz LoL (League of Legends) en français : devine les champions et leurs spells, révise le lore et les rôles. Jouable sur mobile et PC, avec indices et fautes mineures tolérées.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -47,19 +46,14 @@ export const metadata: Metadata = {
     template: "%s — Legends Rift",
   },
   description: defaultDesc,
-  alternates: {
-    canonical: "/", // avec metadataBase, cela pointe vers SITE_URL/
-  },
+  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     url: SITE_URL,
     siteName,
     title: defaultTitle,
     description: defaultDesc,
-    images: [
-      // place un fichier public/og.jpg
-      { url: "/og.jpg", width: 1200, height: 630, alt: "Legends Rift" },
-    ],
+    images: [{ url: "/og.jpg", width: 1200, height: 630, alt: "Legends Rift" }],
   },
   twitter: {
     card: "summary_large_image",
@@ -74,7 +68,6 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  // JSON-LD organisation + website
   const ORG = {
     "@context": "https://schema.org",
     "@type": "Organization",
@@ -93,11 +86,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr" dir="ltr">
       <head>
-
+        {/* Vérification Search Console (prod only) */}
         {process.env.NODE_ENV === "production" ? (
-        <meta
-        name="google-site-verification"
-        content="GZOWd8_r_248eI4etmNmX0znAhTsbVB-OzIcqhE8bs0" />
+          <meta
+            name="google-site-verification"
+            content="GZOWd8_r_248eI4etmNmX0znAhTsbVB-OzIcqhE8bs0"
+          />
         ) : null}
 
         {/* PERF: préconnect aux CDN images */}
@@ -109,30 +103,53 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Couleur barre d’adresse (mobile) */}
         <meta name="theme-color" content="#0e1117" />
 
-        {/* Noindex explicite en PREVIEW (ceinture+bretelles avec header Vercel) */}
+        {/* Noindex explicite en PREVIEW */}
         {isPreview ? <meta name="robots" content="noindex, nofollow, noarchive" /> : null}
 
         {/* Déclaration AdSense (sans script), respect CMP */}
         {hasAdsense ? (
           <meta
             name="google-adsense-account"
-            content={`ca-${process.env.NEXT_PUBLIC_ADSENSE_PUB_ID}`} // ex: ca-pub-1234567890123456
+            content={`ca-${process.env.NEXT_PUBLIC_ADSENSE_PUB_ID}`}
           />
         ) : null}
 
         {/* JSON-LD globaux */}
         <JsonLd data={ORG} />
         <JsonLd data={WEBSITE} />
+
+        {/* === GTM: Script (HEAD) === */}
+        {GTM_ID ? (
+          <Script id="gtm-init" strategy="afterInteractive">
+            {`
+              (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+              new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+              j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+              'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+              })(window,document,'script','dataLayer','${GTM_ID}');
+            `}
+          </Script>
+        ) : null}
       </head>
 
-      {/* ⚠️ Tu avais "overflow-y-scroll" (force la scrollbar). 
-          Pour éviter la barre forcée en desktop, on laisse le comportement natif (auto). */}
       <body className="min-h-dvh bg-[#0e1117] text-white antialiased">
+        {/* === GTM: NoScript (tout en haut du <body>) === */}
+        {GTM_ID ? (
+          <noscript>
+            <iframe
+              src={`https://www.googletagmanager.com/ns.html?id=${GTM_ID}`}
+              height="0"
+              width="0"
+              style={{ display: "none", visibility: "hidden" }}
+            />
+          </noscript>
+        ) : null}
+
         {/* 🛟 Garde-fou CSS si les styles ne chargent pas */}
         <CssGuard />
 
         {/* chargés tôt mais “consent-aware” */}
-        <AnalyticsLoader />
+        {/* 🔕 AnalyticsLoader supprimé en mode GTM */}
         <AdsConsentBridge />
 
         <ConsentDomBridge />
@@ -146,16 +163,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* En-tête global */}
         <SiteHeader />
 
-        {/* Bandeau cookies RGPD (monté côté client avec délai pour ne pas impacter le LCP) */}
+        {/* Bandeau cookies RGPD (monté côté client) */}
         <ClientMount delayMs={1500}>
           <CookieNotice />
         </ClientMount>
 
-        {/* 🔌 Bridge Consent → gtag (no-op si gtag absent) */}
-        <ConsentGtagBridge />
-
-        {/* Tracker pageview côté client (no-op si pas de GA_ID) */}
-        {process.env.NEXT_PUBLIC_GA_ID ? <GaPageview /> : null}
+        {/* Optionnel : Bridge Consent → gtag (no-op en GTM si gtag absent)
+            Recommandation: gérer Consent Mode DANS GTM (Consent Initialization tag) */}
+        {/* <ConsentGtagBridge /> */}
 
         {/* Contenu principal */}
         <main id="main" tabIndex={-1} className="mx-auto max-w-6xl px-3 sm:px-4 py-6">
