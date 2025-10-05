@@ -7,9 +7,10 @@ const isPreview = process.env.VERCEL_ENV === "preview";
 
 const allowPlausible = !!process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
 const allowAds = !!process.env.NEXT_PUBLIC_ADSENSE_PUB_ID;
-
 // Vercel Live feedback : autorisé UNIQUEMENT en Preview
 const allowVercelLive = process.env.NEXT_PUBLIC_ALLOW_VERCEL_LIVE === "1" || isPreview;
+// ✅ Google Analytics (gtag.js / GA4)
+const allowGA = !!process.env.NEXT_PUBLIC_GA_ID;
 
 function buildCsp(): string {
   const scriptSrc = [
@@ -21,6 +22,8 @@ function buildCsp(): string {
     ...(allowAds ? ["https://fundingchoicesmessages.google.com"] : []),
     // Vercel Live feedback (preview uniquement)
     ...(allowVercelLive ? ["https://vercel.live"] : []),
+    // Google Analytics
+    ...(allowGA ? ["https://www.googletagmanager.com"] : []),
   ];
 
   const imgSrc = [
@@ -36,6 +39,7 @@ function buildCsp(): string {
           "https://tpc.googlesyndication.com",
         ]
       : []),
+    ...(allowGA ? ["https://www.google-analytics.com"] : []), // ✅ pixel GA
   ];
 
   const connectSrc = [
@@ -51,6 +55,13 @@ function buildCsp(): string {
         ]
       : []),
     ...(allowVercelLive ? ["https://vercel.live"] : []),
+    ...(allowGA
+      ? [
+          "https://www.google-analytics.com",
+          "https://region1.google-analytics.com",
+          "https://www.googletagmanager.com",
+        ]
+      : []), // ✅ GA endpoints
   ];
 
   const frameSrc = [

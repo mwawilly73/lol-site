@@ -4,46 +4,53 @@ import { useEffect } from "react";
 import { readConsentClient, subscribeConsent, type ConsentSnapshot } from "@/lib/consent";
 import { isProdLike } from "@/lib/runtime";
 
+/**
+ * Déclare gtag de façon typée (sans any).
+ */
 declare global {
   interface Window {
-    gtag?: (...args: unknown[]) => void;
+    dataLayer?: unknown[];
+    gtag?: (command: string, field: string, params?: Record<string, string>) => void;
   }
 }
 
 /**
- * Propage le consentement à gtag si présent.
- * - adsPersonalized = true -> tout granted
- * - adsPersonalized = false -> tout denied (pub non personnalisée)
+ * Propage le consentement à GA4 (Consent Mode).
+ * - analytics = true  -> analytics_storage=granted
+ * - adsPersonalized = true -> ad_* = granted
+ * - sinon denied
  */
 export default function ConsentGtagBridge() {
   useEffect(() => {
     if (!isProdLike()) return;
 
-    const updateGtag = (c: ConsentSnapshot | null | undefined) => {
-      if (typeof window.gtag !== "function") return;
+    const pushConsent = (c: ConsentSnapshot | null | undefined): void => {
+      const gtag = window.gtag;
+      if (typeof gtag !== "function") return;
 
       const analytics = !!c?.analytics;
       const adsPers = !!c?.adsPersonalized;
 
-      const ad_storage = adsPers ? "granted" : "denied";
-      const analytics_storage = analytics ? "granted" : "denied";
-      const ad_user_data = adsPers ? "granted" : "denied";
-      const ad_personalization = adsPers ? "granted" : "denied";
+      // Valeurs conformes Consent Mode v2
+      const update: Record<string, string> = {
+        analytics_storage: analytics ? "granted" : "denied",
+        ad_storage: adsPers ? "granted" : "denied",
+        ad_user_data: adsPers ? "granted" : "denied",
+        ad_personalization: adsPers ? "granted" : "denied",
+      };
 
       try {
-        window.gtag!("consent", "update", {
-          ad_storage,
-          analytics_storage,
-          ad_user_data,
-          ad_personalization,
-        });
+        gtag("consent", "update", update);
       } catch {
         // silencieux
       }
     };
 
-    updateGtag(readConsentClient());
-    const unsub = subscribeConsent((c) => updateGtag(c));
+    // 1) Propager l'état courant au mount
+    pushConsent(readConsentClient());
+
+    // 2) S'abonner aux changements du CMP
+    const unsub = subscribeConsent((snapshot) => pushConsent(snapshot));
     return () => unsub();
   }, []);
 

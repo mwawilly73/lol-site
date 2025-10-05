@@ -15,6 +15,8 @@ import ClientMount from "@/components/ClientMount";
 import JsonLd from "@/components/JsonLd";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
+import GaPageview from "@/components/GaPageview";
+
 
 // Résolution d'URL propre (prod > preview > dev)
 const RAW_HOST =
@@ -151,6 +153,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
         {/* 🔌 Bridge Consent → gtag (no-op si gtag absent) */}
         <ConsentGtagBridge />
+
+        {/* Tracker pageview côté client (no-op si pas de GA_ID) */}
+        {process.env.NEXT_PUBLIC_GA_ID ? <GaPageview /> : null}
 
         {/* Contenu principal */}
         <main id="main" tabIndex={-1} className="mx-auto max-w-6xl px-3 sm:px-4 py-6">

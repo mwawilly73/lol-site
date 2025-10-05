@@ -1,60 +1,46 @@
-// components/AnalyticsLoader.tsx
 "use client";
 
-import { useEffect, useRef } from "react";
-import {
-  readConsentClient,
-  subscribeConsent,
-  type ConsentSnapshot,
-} from "@/lib/consent";
-import { isProdLike } from "@/lib/runtime";
+import Script from "next/script";
 
-/**
- * Charge Plausible uniquement :
- * - en prod réelle (pas localhost)
- * - si consentement analytics = true
- * - et pas deux fois (memo ref)
- */
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
+
 export default function AnalyticsLoader() {
-  const domain = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;
-  const loadedRef = useRef(false);
+  if (!GA_ID) return null;
 
-  useEffect(() => {
-    if (!isProdLike()) return;      // ⛔ rien en dev/localhost
-    if (!domain) return;
+  return (
+    <>
+      {/* Consent Mode par défaut (denied) : rien ne part tant que le CMP n’a pas donné le feu vert */}
+      <Script id="ga-consent-default" strategy="afterInteractive">
+        {`
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
 
-    const loadScript = () => {
-      if (loadedRef.current) return;
-      const c = readConsentClient();
-      if (!c?.analytics) return;
+          gtag('consent', 'default', {
+            'ad_storage': 'denied',
+            'ad_user_data': 'denied',
+            'ad_personalization': 'denied',
+            'analytics_storage': 'denied',
+            'functionality_storage': 'denied',
+            'personalization_storage': 'denied',
+            'security_storage': 'granted'
+          });
+        `}
+      </Script>
 
-      const s = document.createElement("script");
-      s.src = "https://plausible.io/js/script.js";
-      s.defer = true;
-      s.setAttribute("data-domain", domain);
-      document.head.appendChild(s);
-      loadedRef.current = true;
-    };
+      {/* gtag.js */}
+      <Script
+        src={`https://www.googletagmanager.com/gtag/js?id=${GA_ID}`}
+        strategy="afterInteractive"
+      />
 
-    // planifie après idle (fallback setTimeout)
-    const scheduleIdle = (work: () => void, timeout = 1500) => {
-      if (
-        typeof window !== "undefined" &&
-        typeof window.requestIdleCallback === "function"
-      ) {
-        window.requestIdleCallback(() => work(), { timeout });
-      } else {
-        window.setTimeout(work, Math.min(timeout, 1600));
-      }
-    };
-
-    scheduleIdle(loadScript);
-
-    const unsub = subscribeConsent((c: ConsentSnapshot) => {
-      if (c.analytics) loadScript();
-    });
-    return () => unsub();
-  }, [domain]);
-
-  return null;
+      {/* Init GA (sans page_view auto, on trackera nous-même) */}
+      <Script id="ga-init" strategy="afterInteractive">
+        {`
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+          gtag('config', '${GA_ID}', { send_page_view: false, allow_google_signals: false });
+        `}
+      </Script>
+    </>
+  );
 }
