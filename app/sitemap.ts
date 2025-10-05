@@ -27,6 +27,24 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.9,
     },
     {
+      url: `${base}/games/chrono`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.9,
+    },
+    {
+      url: `${base}/games/skins`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.9,
+    },
+    {
+      url: `${base}/games`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.5,
+    },
+    {
       url: `${base}/a-propos`,
       lastModified: now,
       changeFrequency: "monthly",

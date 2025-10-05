@@ -95,9 +95,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {process.env.NODE_ENV === "production" ? (
         <meta
         name="google-site-verification"
-        content="GZOWd8_r_248eI4etmNmX0znAhTsbVB-OzIcqhE8bs0"
-        />
-      ) : null}
+        content="GZOWd8_r_248eI4etmNmX0znAhTsbVB-OzIcqhE8bs0" />
+        ) : null}
 
         {/* PERF: préconnect aux CDN images */}
         <link rel="preconnect" href="https://ddragon.leagueoflegends.com" crossOrigin="" />
