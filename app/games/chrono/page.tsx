@@ -10,12 +10,12 @@ import JsonLd from "@/components/JsonLd";
 import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Chrono-Break — Legends Rift",
-  description: "Devine les champions grâce à leurs skins/splashes avec un chrono.",
+  title: "Quiz LoL : Chrono-Break — Legends Rift",
+  description: "Devine les champions de League of Legends grâce à leurs skins/splashes avec un chrono.",
   alternates: { canonical: "/games/chrono" },
   openGraph: {
     title: "Chrono-Break — Legends Rift",
-    description: "Devine les champions grâce à leurs skins/splashes avec un chrono.",
+    description: "Devine les champions de League of Legends grâce à leurs skins/splashes avec un chrono.",
     url: "/games/chrono",
     type: "website",
   },
@@ -39,7 +39,7 @@ export default async function ChronoBreakPage() {
     genre: ["Quiz", "Mémoire", "LoL"],
     url: `${SITE_URL}/games/chrono`,
     image: `${SITE_URL}/og/chrono.png`,
-    description: "Devine des champions LoL via leurs splash en temps limité.",
+    description: "Devine des champions de LoL via leurs splash en temps limité.",
   };
 
   const HOWTO = {
@@ -91,8 +91,8 @@ export default async function ChronoBreakPage() {
       <Breadcrumbs items={[{ label: "Accueil", href: "/" }, { label: "Jeux", href: "/games" }, { label: "Chrono-Break" }]} />
 
       <header className="space-y-2 text-center">
-        <h1 className="text-2xl md:text-3xl font-bold">Chrono-Break</h1>
-        <p className="text-white/80">Devine les champions grâce à leurs skins/splashes avec un chrono.</p>
+        <h1 className="text-2xl md:text-3xl font-bold">Quiz LoL : Chrono-Break</h1>
+        <p className="text-white/80">Devine les champions de League of Legends grâce à leurs skins/splashes avec un chrono.</p>
       </header>
 
       <ChampionsChrono initialChampions={champions} targetTotal={champions.length} />

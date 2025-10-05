@@ -21,6 +21,7 @@ export default function SiteFooter() {
               <Link className="hover:text-white transition-colors" href="/legal/mentions-legales">Mentions légales</Link>
               <Link className="hover:text-white transition-colors" href="/legal/confidentialite">Confidentialité</Link>
               <Link className="hover:text-white transition-colors" href="/cookies">Cookies</Link>
+              <Link className="hover:text-white transition-colors" href="/quiz-lol">quiz-lol</Link>
             </nav>
           </div>
         </div>

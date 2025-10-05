@@ -35,8 +35,8 @@ export const viewport: Viewport = {
 // Métadonnées globales
 const siteName = "Legends Rift";
 const defaultTitle = "Legends Rift — Jeux & Quiz League of Legends";
-const defaultDesc =
-  "Jeux et quiz autour des champions de League of Legends. Devine les champions, découvre leurs rôles et leur lore, en français.";
+const defaultDesc = "Quiz LoL (League of Legends) en français : devine les champions et leurs spells, révise le lore et les rôles. Jouable sur mobile et PC, avec indices et fautes mineures tolérées.";
+
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

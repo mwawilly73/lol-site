@@ -3,7 +3,8 @@ import { ImageResponse } from "next/og";
 export const runtime = "edge";
 export const contentType = "image/png";
 export const size = { width: 1200, height: 630 };
-export const alt = "Quiz LoL : Liste des champions — Devine les 171 champions | Legends Rift";
+export const alt =
+  "Quiz LoL : Skin Finder — Trouve des skins de League of Legends | Legends Rift";
 
 export default function OG() {
   const W = size.width;
@@ -110,7 +111,7 @@ export default function OG() {
                 textShadow: "0 10px 32px rgba(0,0,0,.55)",
               }}
             >
-              Liste des champions
+              Skin Finder
             </div>
             <div
               style={{
@@ -119,7 +120,7 @@ export default function OG() {
                 opacity: 0.95,
               }}
             >
-              Devine les 171 champions de LoL
+              Trouve les skins de LoL
             </div>
 
             {/* badges features */}
@@ -133,9 +134,9 @@ export default function OG() {
               }}
             >
               {[
-                { txt: "Mode facile (flou/N&B)", bg: "rgba(99,102,241,.20)" },
-                { txt: "Mode normal", bg: "rgba(244,63,94,.18)" },
-                { txt: "Accents/typos tolérées", bg: "rgba(6,182,212,.20)" },
+                { txt: "Recherche par champion", bg: "rgba(99,102,241,.20)" },
+                { txt: "Thèmes / rareté", bg: "rgba(244,63,94,.18)" },
+                { txt: "Aperçus visuels", bg: "rgba(6,182,212,.20)" },
                 { txt: "Sans inscription", bg: "rgba(16,185,129,.18)" },
               ].map((b) => (
                 <div
@@ -174,7 +175,9 @@ export default function OG() {
                 boxShadow: "0 8px 32px rgba(99,102,241,.35)",
               }}
             />
-            <div style={{ fontSize: 20, opacity: 0.9 }}>Legends Rift.app</div>
+            {/* Mets ici ton domaine d'affichage. Si tu veux garder le même texte que la version champions,
+                remets "Legends Rift.app". */}
+            <div style={{ fontSize: 20, opacity: 0.9 }}>legendsrift.com</div>
           </div>
         </div>
       ),
@@ -196,7 +199,7 @@ export default function OG() {
             fontFamily: "Arial, sans-serif",
           }}
         >
-          Quiz LoL : Liste des champions — Legends Rift
+          Quiz LoL : Skin Finder — Legends Rift
         </div>
       ),
       { ...size }

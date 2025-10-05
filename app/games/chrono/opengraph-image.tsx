@@ -3,7 +3,7 @@ import { ImageResponse } from "next/og";
 export const runtime = "edge";
 export const contentType = "image/png";
 export const size = { width: 1200, height: 630 };
-export const alt = "Chrono-Break — Devine les champions au chrono | Legends Rift";
+export const alt = "Quiz LoL : Chrono-Break — Devine les champions au chrono | Legends Rift";
 
 export default function OG() {
   const W = size.width;
@@ -86,7 +86,7 @@ export default function OG() {
                 Legends Rift
               </div>
               <div style={{ fontSize: 16, opacity: 0.7 }}>
-                Jeux & quiz sur les champions
+                Jeux & quiz sur les champions de League of Legends
               </div>
             </div>
           </div>
@@ -223,7 +223,7 @@ export default function OG() {
             fontFamily: "Arial, sans-serif",
           }}
         >
-          Chrono-Break — Legends Rift
+          Quiz LoL : Chrono-Break — Legends Rift
         </div>
       ),
       { ...size }

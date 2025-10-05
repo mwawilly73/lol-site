@@ -10,14 +10,14 @@ import JsonLd from "@/components/JsonLd";
 import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Trouve tous les Champions | Legends Rift",
+  title: "Jeu des Champions — Quiz LoL | Legends Rift",
   description:
-    "Écris le nom exact d'un champion de League of Legends pour retourner sa carte. Mode facile : flou NB. Mode normal : débrouille-toi !",
+    "Quiz LoL : Écris le nom exact d'un champion de League of Legends pour retourner sa carte. Mode facile : flou NB. Mode normal : débrouille-toi !",
   alternates: { canonical: "/games/champions" },
   openGraph: {
     title: "Trouve tous les Champions | Legends Rift",
     description:
-      "Écris le nom exact d'un champion de League of Legends pour retourner sa carte.",
+      "Quiz LoL : Écris le nom exact d'un champion de League of Legends pour retourner sa carte.",
     url: "/games/champions",
     type: "website",
   },
@@ -79,7 +79,7 @@ export default async function ChampionsPage() {
 
       {/* En-tête de page */}
       <header className="space-y-2 text-center">
-        <h1 className="text-2xl md:text-3xl font-bold">Trouve tous les Champions</h1>
+        <h1 className="text-2xl md:text-3xl font-bold"> Quiz LoL : Trouve tous les Champions</h1>
         <p className="text-white/80">
           Écris le nom exact d&apos;un champion de League of Legends pour retourner sa carte.
         </p>

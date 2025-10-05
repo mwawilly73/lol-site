@@ -64,10 +64,11 @@ export default function HomePage() {
         <HeroRotator images={HERO_IMGS} intervalMs={5000}>
           <div className="text-center drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]">
             <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight">
-              Bienvenue sur <span className="text-indigo-300">Legends Rift</span>
+              Quiz LoL : Bienvenue sur <span className="text-indigo-300">Legends Rift</span>
             </h1>
             <p className="mt-2 text-sm sm:text-lg text-white/85">
-              Entraîne ta mémoire avec des mini-jeux autour des champions.
+              Lance un <strong>quiz LoL</strong> dans l'univers de League Of Legends. <br />
+              Fautes mineures tolérées, indices, et modes rapides pour s’amuser sur mobile et PC.
             </p>
           </div>
         </HeroRotator>

@@ -8,11 +8,11 @@ import Breadcrumbs from "@/components/Breadcrumbs";
 import SkinFinder from "@/components/SkinFinder";
 
 export const metadata: Metadata = {
-  title: "Skin Finder — Legends Rift",
+  title: "Quiz LoL : Skin Finder — Legends Rift",
   description: "Devine le nom du skin (FR ou EN) à partir du splash d’un champion.",
   alternates: { canonical: "/games/skins" },
   openGraph: {
-    title: "Skin Finder — Legends Rift",
+    title: "Quiz LoL : Skin Finder — Legends Rift",
     description: "Devine le nom du skin (FR ou EN) à partir du splash d’un champion.",
     url: "/games/skins",
     type: "website",
@@ -33,9 +33,9 @@ export default async function SkinFinderPage() {
       <Breadcrumbs items={[{ label: "Accueil", href: "/" },{ label: "Jeux", href: "/games" },{ label: "Skin Finder" }]} />
 
       <header className="space-y-2 text-center">
-        <h1 className="text-2xl md:text-3xl font-bold">Skin Finder</h1>
+        <h1 className="text-2xl md:text-3xl font-bold">Quiz LoL : Skin Finder</h1>
         <p className="text-white/80">
-          But du jeu : <strong>trouver le nom du skin</strong>. Langues acceptées : FR ou EN.
+          But du jeu : <strong>trouver le nom du skin</strong>. en FR ou EN.  ( ex : "Lunar Empress" ou "Impératrice lunaire" ).
         </p>
       </header>
 
