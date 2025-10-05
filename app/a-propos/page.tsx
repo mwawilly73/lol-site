@@ -6,7 +6,7 @@ import { breadcrumbJsonLd } from "@/lib/seo";
 
 export const metadata: Metadata = {
   title: "Quiz LoL : À propos — Legends Rift",
-  description: "En savoir plus sur le projet Legends Rift et notre mission communautaire.",
+  description: "En savoir plus sur le projet Legends Rift et notre projet communautaire.",
   alternates: { canonical: "/a-propos" },
 };
 
@@ -23,7 +23,7 @@ export default function AProposPage() {
     url: `${SITE}/a-propos`,
     isPartOf: { "@type": "WebSite", name: "Legends Rift", url: SITE },
     description:
-      "En savoir plus sur le projet Legends Rift et notre mission communautaire.",
+      "En savoir plus sur le projet Legends Rift et notre projet communautaire.",
   };
 
   return (
@@ -39,7 +39,7 @@ export default function AProposPage() {
           Legends Rift est un projet communautaire visant à proposer des mini-jeux
           amusants autour de League of Legends. Notre objectif est de créer une
           plateforme où les fans de LoL peuvent tester et améliorer leurs connaissances
-          des champions tout en s'amusant. Nous croyons en la puissance de la
+          des champions tout en s’amusant. Nous croyons en la puissance de la
           communauté et nous nous efforçons de fournir un espace convivial et engageant
           pour tous les joueurs. Que vous soyez un vétéran de LoL ou un nouveau venu, nous espérons que
           vous trouverez quelque chose à apprécier sur Legends Rift.

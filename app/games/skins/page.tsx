@@ -9,11 +9,11 @@ import SkinFinder from "@/components/SkinFinder";
 
 export const metadata: Metadata = {
   title: "Quiz LoL : Skin Finder — Legends Rift",
-  description: "Devine le nom du skin (FR ou EN) à partir du splash d’un champion.",
+  description: "Devine le nom du skin LoL (FR ou EN) à partir du splash d’un champion.",
   alternates: { canonical: "/games/skins" },
   openGraph: {
     title: "Quiz LoL : Skin Finder — Legends Rift",
-    description: "Devine le nom du skin (FR ou EN) à partir du splash d’un champion.",
+    description: "Devine le nom du skin LoL(FR ou EN) à partir du splash d’un champion.",
     url: "/games/skins",
     type: "website",
   },
@@ -35,7 +35,7 @@ export default async function SkinFinderPage() {
       <header className="space-y-2 text-center">
         <h1 className="text-2xl md:text-3xl font-bold">Quiz LoL : Skin Finder</h1>
         <p className="text-white/80">
-          But du jeu : <strong>trouver le nom du skin</strong>. en FR ou EN.  ( ex : "Lunar Empress" ou "Impératrice lunaire" ).
+          But du jeu : <strong>trouver le nom du skin</strong>. en FR ou EN.  ( ex : « Lunar Empress » ou « Impératrice lunaire » ).
         </p>
       </header>
 
