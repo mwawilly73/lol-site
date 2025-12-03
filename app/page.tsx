@@ -29,6 +29,7 @@ export default function HomePage() {
 
   // Images pour le hero (tu peux en ajouter/retirer librement)
   const HERO_IMGS = [
+    "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Zaahen_0.jpg",
     "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Aatrox_8.jpg",
     "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Ahri_88.jpg",
     "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Alistar_22.jpg",
@@ -89,7 +90,7 @@ export default function HomePage() {
             <GameCard
               href="/games/champions"
               title="Liste des champions"
-              subtitle="Devine les 171 champions de LoL"
+              subtitle="Devine les 172 champions de LoL"
               imageUrl={CHAMPIONS_CARD_BG}
             />
 
